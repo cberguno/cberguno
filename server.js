@@ -28,9 +28,6 @@ app.post('/api/search', async (req, res) => {
     // Search across multiple sources
     const results = await priceScraper.searchPrices(product.trim());
 
-    // Sort by price (lowest to highest)
-    results.sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
-
     res.json({
       product,
       count: results.length,

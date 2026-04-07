@@ -55,16 +55,10 @@ async function performSearch(product) {
 
         // Update header information
         searchTermElement.textContent = data.product;
-        resultCountElement.textContent = `Found ${data.count} result${data.count !== 1 ? 's' : ''} across multiple retailers`;
+        resultCountElement.textContent = `Search "${data.product}" on these retailers:`;
 
         // Render results
         renderResults(data.results);
-
-        // Calculate and display statistics
-        displayStatistics(data.results);
-
-        // Show stats section
-        statsSection.style.display = 'block';
 
     } catch (error) {
         console.error('Error:', error);
@@ -88,20 +82,12 @@ function createPriceCard(item, index) {
     card.className = 'price-card';
     card.style.animation = `fadeIn 0.3s ease-in ${index * 0.05}s both`;
 
-    const stockStatus = item.inStock ? 'In Stock' : 'Out of Stock';
-    const stockClass = item.inStock ? 'in-stock' : 'out-of-stock';
-
     card.innerHTML = `
         <div class="price-card-left">
             <div class="price-icon">${item.icon || '🔗'}</div>
-            <div class="price-info">
-                <h3>${item.source}</h3>
-                <div class="price-rating">⭐ ${item.rating} • $${parseFloat(item.price).toFixed(2)}</div>
-                <span class="stock-status ${stockClass}">${stockStatus}</span>
-            </div>
+            <h3>${item.source}</h3>
         </div>
         <div class="price-card-right">
-            <div class="price-amount">$${parseFloat(item.price).toFixed(2)}</div>
             <a href="${item.url}" target="_blank" rel="noopener noreferrer" class="price-link">
                 View Deal
             </a>
@@ -109,19 +95,6 @@ function createPriceCard(item, index) {
     `;
 
     return card;
-}
-
-function displayStatistics(results) {
-    const prices = results.map(r => parseFloat(r.price));
-    const lowestPrice = Math.min(...prices);
-    const highestPrice = Math.max(...prices);
-    const avgPrice = (prices.reduce((a, b) => a + b) / prices.length).toFixed(2);
-    const bestDealSource = results.find(r => parseFloat(r.price) === lowestPrice);
-
-    document.getElementById('lowestPrice').textContent = `$${lowestPrice.toFixed(2)}`;
-    document.getElementById('avgPrice').textContent = `$${avgPrice}`;
-    document.getElementById('priceRange').textContent = `$${lowestPrice.toFixed(2)} - $${highestPrice.toFixed(2)}`;
-    document.getElementById('bestDeal').textContent = `${bestDealSource.source} @ $${lowestPrice.toFixed(2)}`;
 }
 
 // Allow Enter key in input field

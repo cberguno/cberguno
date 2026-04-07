@@ -34,23 +34,16 @@ const sources = [
   }
 ];
 
-// Generate realistic product results with real search URLs
-function generatePriceResults(product) {
+// Generate search results with real URLs (no fake prices)
+function generateSearchResults(product) {
   const results = [];
-  const basePrice = Math.random() * 500 + 50;
 
   // Generate results for each source with real search URLs
   sources.forEach((source) => {
-    const priceVariation = (Math.random() - 0.5) * 100; // ±$50 variation
-    const price = Math.max(10, basePrice + priceVariation).toFixed(2);
-
     results.push({
       source: source.name,
-      price,
       url: source.formatUrl(product), // Real search URL for the product
-      inStock: Math.random() > 0.1, // 90% in stock
-      icon: source.icon,
-      rating: (Math.random() * 2 + 3.5).toFixed(1)
+      icon: source.icon
     });
   });
 
@@ -63,14 +56,11 @@ async function searchPrices(product) {
     // Simulate API call delay
     await new Promise(resolve => setTimeout(resolve, 300));
 
-    const results = generatePriceResults(product);
+    const results = generateSearchResults(product);
 
     return results.map(item => ({
       source: item.source,
-      price: item.price,
       url: item.url,
-      inStock: item.inStock,
-      rating: item.rating,
       icon: item.icon || '🔗'
     }));
   } catch (error) {
