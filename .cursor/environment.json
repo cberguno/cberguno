@@ -1,0 +1,16 @@
+{
+  "name": "Price Comparison Tool",
+  "install": "npm install",
+  "terminals": [
+    {
+      "name": "server",
+      "command": "npm start"
+    }
+  ],
+  "ports": [
+    {
+      "name": "web",
+      "port": 3000
+    }
+  ]
+}
