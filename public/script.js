@@ -1,7 +1,6 @@
 const searchForm = document.getElementById('searchForm');
 const productInput = document.getElementById('productInput');
 const resultsSection = document.getElementById('resultsSection');
-const statsSection = document.getElementById('statsSection');
 const resultsContainer = document.getElementById('resultsContainer');
 const loadingMessage = document.getElementById('loadingMessage');
 const noResults = document.getElementById('noResults');
@@ -24,7 +23,6 @@ searchForm.addEventListener('submit', async (e) => {
 async function performSearch(product) {
     // Show results section and loading state
     resultsSection.style.display = 'block';
-    statsSection.style.display = 'none';
     loadingMessage.style.display = 'block';
     resultsContainer.innerHTML = '';
     noResults.style.display = 'none';
