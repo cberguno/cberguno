@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Price Comparison Tool</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>💰 Price Comparison Tool</h1>
+            <p>Find the best prices across multiple online retailers</p>
+        </header>
+
+        <main>
+            <section class="search-section">
+                <form id="searchForm">
+                    <div class="input-group">
+                        <input
+                            type="text"
+                            id="productInput"
+                            placeholder="Search for a product (e.g., iPhone 15, Laptop, Headphones)..."
+                            required
+                        />
+                        <button type="submit" class="search-btn">Search</button>
+                    </div>
+                </form>
+                <div id="suggestedProducts" class="suggested-products">
+                    <p>Search any product and compare prices across retailers: <strong>iPhone 15</strong>, <strong>Laptop</strong>, <strong>Headphones</strong>, <strong>USB-C Cable</strong></p>
+                </div>
+            </section>
+
+            <section id="resultsSection" class="results-section" style="display: none;">
+                <div class="results-header">
+                    <h2>Results for: <span id="searchTerm"></span></h2>
+                    <p id="resultCount"></p>
+                </div>
+
+                <div id="loadingMessage" class="loading" style="display: none;">
+                    <span class="spinner"></span>
+                    <p>Searching for prices...</p>
+                </div>
+
+                <div id="resultsContainer" class="results-container">
+                    <!-- Results will be populated here -->
+                </div>
+
+                <div id="noResults" class="no-results" style="display: none;">
+                    <p>No results found. Try a different product name.</p>
+                </div>
+            </section>
+
+        </main>
+
+        <footer>
+            <p>&copy; 2024 Price Comparison Tool. Find the best deals online!</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
