@@ -157,7 +157,7 @@ function save(){S.updatedAt=Date.now();saveLocal();schedulePush()}
 /* ---------- Cloud sync (shared passcode, via /api/state) ---------- */
 const SYNC_KEY='quietcue.sync';
 let syncKey=null;try{syncKey=localStorage.getItem(SYNC_KEY)}catch(e){}
-let pushT=null,syncing=false;
+let pushT=null,syncing=false,syncAvail=!!syncKey;
 async function deriveKey(pass){
   const enc=new TextEncoder();
   const base=await crypto.subtle.importKey('raw',enc.encode(pass.trim()),'PBKDF2',false,['deriveBits']);
@@ -176,6 +176,7 @@ async function apiPut(){
 }
 function initSync(){
   if(syncKey)pull(false);
+  else fetch('/api/state?key='+'0'.repeat(64),{cache:'no-store'}).then(r=>{if(r.status===404||r.status===200){syncAvail=true;render()}}).catch(()=>{});
   setInterval(()=>{if(syncKey&&!document.hidden)pull(false)},15000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden&&syncKey)pull(false)});
 }
@@ -198,6 +199,42 @@ async function pull(first){
 function schedulePush(){
   if(!syncKey)return;
   clearTimeout(pushT);pushT=setTimeout(()=>apiPut().catch(()=>toast('Sync failed — will retry')),1200);
+}
+async function pack(obj){
+  const bs=new Blob([JSON.stringify(obj)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+  const buf=new Uint8Array(await new Response(bs).arrayBuffer());let bin='';buf.forEach(b=>bin+=String.fromCharCode(b));
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+async function unpack(str){
+  const bin=atob(str.replace(/-/g,'+').replace(/_/g,'/'));
+  const bs=new Blob([Uint8Array.from(bin,c=>c.charCodeAt(0))]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return JSON.parse(await new Response(bs).text());
+}
+async function openTransfer(){
+  if(!(window.CompressionStream)){alert('This browser can\'t make a transfer link. Use Export backup on the Roster tab instead.');return}
+  const link=location.origin+location.pathname+'#roster='+await pack({v:1,classes:S.classes,active:S.active,volume:S.volume});
+  modal.innerHTML=`<div class="row" style="margin-bottom:12px"><b class="sp" style="font-size:17px">Send to phone</b><button class="pill ghost" id="aclose">Close</button></div>
+    <p style="margin-top:0">Open this link on your phone to load your classes and students there. It copies your roster once (it won't stay in sync). The roster travels inside the link and isn't stored on any server, so send it only to yourself — for example by text or email to yourself.</p>
+    <div class="list" style="margin-top:0"><input type="text" id="alink" readonly value="${esc(link)}">
+    <div class="row"><button class="btn" id="acopy">Copy link</button>${navigator.share?'<button class="btn alt" id="ashare">Share…</button>':''}</div></div>`;
+  mask.classList.add('on');
+  $('#aclose').onclick=closeModal;
+  $('#alink').onfocus=e=>e.target.select();
+  $('#acopy').onclick=()=>{(navigator.clipboard?navigator.clipboard.writeText(link):Promise.reject()).then(()=>toast('Link copied'),()=>{$('#alink').select();toast('Select and copy the link')})};
+  if(navigator.share)$('#ashare').onclick=()=>navigator.share({title:'QuietCue roster',url:link}).catch(()=>{});
+}
+async function checkImport(){
+  const m=location.hash.match(/^#roster=(.+)$/);if(!m)return;
+  try{
+    const d=await unpack(m[1]);
+    if(!d||!Array.isArray(d.classes))throw 0;
+    const n=d.classes.reduce((a,c)=>a+c.students.length,0);
+    history.replaceState(null,'',location.pathname);
+    if(confirm('Load '+d.classes.length+' class(es) with '+n+' students on this device?'+(S.classes.length?'\n\nThis replaces the roster currently on this device.':''))){
+      S={classes:d.classes,events:[],active:d.active||d.classes[0]&&d.classes[0].id,volume:d.volume||1};
+      save();ui.tab='class';render();toast('Roster loaded');
+    }
+  }catch(e){history.replaceState(null,'',location.pathname);alert('That link could not be read. Ask for a new one.')}
 }
 function openSync(){
   if(syncKey){
@@ -297,22 +334,23 @@ const $=s=>document.querySelector(s);
 function render(){
   const app=$('#app');
   const banner=$('#banner');
-  if(!S.classes.length){banner.hidden=true;app.innerHTML=landing();$('#demo').onclick=demo;$('#fresh').onclick=fresh;$('#lsign').onclick=openSync;return}
+  if(!S.classes.length){banner.hidden=true;app.innerHTML=landing();$('#demo').onclick=demo;$('#fresh').onclick=fresh;if(syncAvail)$('#lsign').onclick=openSync;return}
   banner.hidden=ui.bannerDismissed||!!syncKey;
-  banner.innerHTML='This device keeps your roster locally — sync it to your phone with a passcode <button id="bx">Set up sync</button>';
-  const bx=$('#bx');if(bx)bx.onclick=openSync;
+  banner.innerHTML=syncAvail?'This device keeps your roster locally — sync it to your phone with a passcode <button id="bx">Set up sync</button>'
+    :'This device keeps your roster locally — want it on your phone too? <button id="bx">Send to phone</button>';
+  const bx=$('#bx');if(bx)bx.onclick=syncAvail?openSync:openTransfer;
   const c=cls();if(c&&S.active!==c.id)S.active=c.id;
   app.innerHTML=`<header><div class="bar">
     <div class="brand"><span style="font-size:22px">🔔</span><div><b>QuietCue</b><small>Quiet classroom cues</small></div></div>
     <div class="tabs">${S.classes.map(k=>`<button data-c="${k.id}" class="${k.id===c.id?'on':''}">${esc(k.name)}</button>`).join('')}</div>
     <span class="sp"></span>
-    <button class="pill ${syncKey?'':'dark'}" id="acct">${syncKey?'Synced':'Sync devices'}</button><button class="pill" id="addc">+ Class</button><button class="pill" id="renc">Rename</button><button class="pill ghost" id="delc">Delete</button>
+    <button class="pill ${syncKey?'':'dark'}" id="acct">${syncAvail?(syncKey?'Synced':'Sync devices'):'Send to phone'}</button><button class="pill" id="addc">+ Class</button><button class="pill" id="renc">Rename</button><button class="pill ghost" id="delc">Delete</button>
   </div></header>
   <main>${ui.tab==='class'?classView(c):ui.tab==='roster'?rosterView(c):ui.tab==='report'?reportView(c):soundsView()}</main>
   <nav><div>${[['class','🏫','Class'],['roster','👥','Roster'],['report','📋','Report'],['sounds','🎵','Sounds']].map(([k,i,l])=>`<button data-t="${k}" class="${ui.tab===k?'on':''}"><span>${i}</span>${l}</button>`).join('')}</div></nav>`;
   app.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{S.active=b.dataset.c;save();render()});
   app.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{ui.tab=b.dataset.t;render();scrollTo(0,0)});
-  $('#acct').onclick=openSync;
+  $('#acct').onclick=syncAvail?openSync:openTransfer;
   $('#addc').onclick=()=>{const n=prompt('Class name');if(n&&n.trim()){const k={id:uid(),name:n.trim(),students:[]};S.classes.push(k);S.active=k.id;save();render()}};
   $('#renc').onclick=()=>{const n=prompt('Rename class',c.name);if(n&&n.trim()){c.name=n.trim();save();render()}};
   $('#delc').onclick=()=>{if(confirm('Delete class "'+c.name+'" and its history?')){S.classes=S.classes.filter(k=>k!==c);S.events=S.events.filter(e=>e.classId!==c.id);S.active=S.classes[0]&&S.classes[0].id;save();render()}};
@@ -320,9 +358,9 @@ function render(){
 }
 function landing(){return`<div class="hero"><div style="font-size:42px">🔔</div><h1>QuietCue</h1>
   <p>Quiet, private cues for elementary classrooms. Tap a student to play their sound — no public call-outs, just calm redirects and warm celebrations.</p>
-  <ul><li>Tap for a private audio cue + automatic log</li><li>Long-press to note redirects or positive moments</li><li>Daily reports ready to share with families</li><li>Optional passcode sync across your devices</li></ul>
-  <div class="btns"><button class="btn" id="demo">Try with demo class</button><button class="btn alt" id="fresh">Start fresh roster</button><button class="btn alt" id="lsign">Sync with a passcode</button></div>
-  <p style="font-size:12px;color:var(--muted)">Data stays on this device unless you turn on passcode sync.</p></div>`}
+  <ul><li>Tap for a private audio cue + automatic log</li><li>Long-press to note redirects or positive moments</li><li>Daily reports ready to share with families</li><li>Send your roster to your phone with one link</li></ul>
+  <div class="btns"><button class="btn" id="demo">Try with demo class</button><button class="btn alt" id="fresh">Start fresh roster</button>${syncAvail?'<button class="btn alt" id="lsign">Sync with a passcode</button>':''}</div>
+  <p style="font-size:12px;color:var(--muted)">Data stays on this device.</p></div>`}
 
 function classView(c){
   const q=ui.search.toLowerCase();
@@ -427,6 +465,8 @@ function bindSounds(){
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
 initSync();
 render();
+checkImport();
+addEventListener('hashchange',checkImport);
 </script>
 </body>
 </html>
