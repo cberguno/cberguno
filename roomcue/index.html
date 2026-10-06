@@ -1,0 +1,351 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>QuietCue</title>
+<meta name="description" content="Quiet, private cues for elementary classrooms.">
+<style>
+:root{
+  --bg:#f4f1ea;--panel:#fff;--ink:#23272a;--muted:#8a8d90;--line:#e6dfcf;--accent:#6b9680;--accent-d:#4f7a64;
+  --warn:#c9744f;--chip:#f1ede3;--radius:18px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 "DM Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+#banner{background:var(--accent);color:#fff;text-align:center;padding:12px 16px;font-size:14px}
+#banner button{margin-left:10px;border:0;border-radius:12px;padding:4px 18px;background:#fff;color:var(--accent-d);font-weight:600}
+header{background:#fbf9f4;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+.bar{max-width:1000px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:8px}
+.brand b{display:block;font-size:17px;line-height:1.1}
+.brand small{color:var(--muted);font-size:12px}
+.tabs{display:flex;background:var(--chip);border-radius:14px;padding:3px;gap:2px;overflow-x:auto;max-width:100%}
+.tabs button{border:0;background:none;padding:8px 16px;border-radius:12px;color:var(--muted);font-weight:600;white-space:nowrap}
+.tabs button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px #0001}
+.sp{flex:1}
+.pill{border:1px solid var(--line);background:#fbf9f4;border-radius:999px;padding:6px 12px;font-size:13px;color:#555}
+.pill.dark{background:var(--ink);color:#fff;border-color:var(--ink)}
+.pill.ghost{border:0;background:none;color:var(--muted)}
+main{max-width:1000px;margin:0 auto;padding:16px 16px 110px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+input[type=text],input[type=search],input[type=date],select{border:1px solid var(--line);background:#fff;border-radius:14px;padding:11px 14px;min-width:0}
+input[type=search]{flex:1}
+input[type=range]{flex:1;accent-color:var(--accent);min-width:120px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:14px}
+.stu{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:14px 8px 12px;text-align:center;user-select:none;-webkit-user-select:none;touch-action:pan-y;transition:transform .08s,box-shadow .2s}
+.stu:active{transform:scale(.97)}
+.stu.flash{box-shadow:0 0 0 3px var(--accent)}
+.av{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;font-weight:700;margin:0 auto 8px;color:#0004;color:#3a2e2a}
+.av.sm{width:36px;height:36px;font-size:13px;margin:0}
+.stu .nm{font-size:14px}
+.stu .sc{font-size:36px;font-weight:600;margin:4px 0;color:#bbb}
+.stu .sc.pos{color:var(--accent-d)}.stu .sc.neg{color:var(--warn)}
+.adj{display:flex;gap:8px;justify-content:center}
+.adj button,.sq{width:34px;height:34px;border:0;border-radius:10px;background:var(--chip);font-weight:700}
+.hint{text-align:center;color:var(--muted);font-size:12px;margin-top:16px}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fbf9f4;border-top:1px solid var(--line);padding:8px 8px calc(8px + env(safe-area-inset-bottom));z-index:6}
+nav div{max-width:1000px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:4px}
+nav button{border:0;background:none;border-radius:14px;padding:8px 4px;color:var(--muted);font-size:12px;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button span{font-size:20px}
+nav button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px #0001}
+.btn{border:0;border-radius:14px;background:var(--accent);color:#fff;padding:11px 18px;font-weight:600}
+.btn.alt{background:var(--chip);color:var(--ink)}
+.btn.danger{background:#f6e3dc;color:var(--warn)}
+.btn:disabled{opacity:.45;cursor:default}
+.list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.item{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 14px}
+.item .grow{flex:1;min-width:0}.item small{color:var(--muted)}
+.sw{display:flex;gap:8px;flex-wrap:wrap}
+.sw button{width:30px;height:30px;border-radius:50%;border:2px solid transparent}
+.sw button.on{border-color:var(--ink)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
+.stats div{background:#fff;border:1px solid var(--line);border-radius:14px;text-align:center;padding:12px 4px}
+.stats b{display:block;font-size:26px}.stats small{color:var(--muted)}
+h3{margin:18px 0 6px;font-size:12px;letter-spacing:.08em;color:var(--muted)}
+.tl{display:flex;gap:14px;padding:8px 0;border-bottom:1px solid var(--line)}
+.tl time{color:var(--muted);min-width:70px}
+.tl .t-redirect{color:var(--warn)}.tl .t-positive{color:var(--accent-d)}
+/* modal */
+.mask{position:fixed;inset:0;background:#2a2a2a66;backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:20;padding:16px}
+.mask.on{display:flex}
+.modal{background:#fbf9f4;border-radius:22px;width:100%;max-width:520px;max-height:88vh;overflow:auto;padding:18px}
+.modal .opt{display:flex;gap:8px;margin-bottom:8px}
+.modal .opt button.main{flex:1;text-align:left;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.modal .opt button.note{width:44px;border:1px solid var(--line);background:#fff;border-radius:14px}
+.modal .opt.pos button.main{border-color:#cfe2d6}
+.toast{position:fixed;left:50%;bottom:92px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:999px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:30;font-size:14px}
+.toast.on{opacity:1}
+.hero{max-width:520px;margin:6vh auto 0;text-align:center}
+.hero h1{font-size:34px;margin:8px 0}
+.hero p{color:#555}
+.hero ul{list-style:none;padding:0;text-align:left;display:inline-block;margin:10px 0 24px}
+.hero li:before{content:"✓";color:var(--accent-d);font-weight:700;margin-right:10px}
+.hero li{margin:8px 0}
+.hero .btns{display:flex;flex-direction:column;gap:10px}
+.empty{color:var(--muted);text-align:center;padding:40px 0}
+@media print{header,nav,#banner,.noprint{display:none!important}main{padding:0}body{background:#fff}}
+@media(max-width:560px){.stats{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div id="banner" hidden></div>
+<div id="app"></div>
+<div class="mask" id="mask"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- Sound synthesis (WebAudio, no assets) ---------- */
+let actx=null,master=null;
+function audio(){
+  if(!actx){actx=new (window.AudioContext||window.webkitAudioContext)();master=actx.createGain();master.connect(actx.destination);}
+  if(actx.state==='suspended')actx.resume();
+  return actx;
+}
+// tone helper: freq envelope [[t,f],...] over dur, type, gain
+function tone(c,t0,{type='sine',f=[[0,440]],dur=.3,g=.5,lp=0}){
+  const o=c.createOscillator(),v=c.createGain();o.type=type;
+  f.forEach(([t,hz],i)=>i?o.frequency.linearRampToValueAtTime(hz,t0+t):o.frequency.setValueAtTime(hz,t0+t));
+  v.gain.setValueAtTime(0,t0);v.gain.linearRampToValueAtTime(g,t0+.015);v.gain.exponentialRampToValueAtTime(.001,t0+dur);
+  let n=o;if(lp){const b=c.createBiquadFilter();b.type='lowpass';b.frequency.value=lp;o.connect(b);n=b;}
+  n.connect(v);v.connect(master);o.start(t0);o.stop(t0+dur+.05);
+}
+function noise(c,t0,dur,g=.3,hp=2000){
+  const len=Math.max(1,c.sampleRate*dur|0),b=c.createBuffer(1,len,c.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<len;i++)d[i]=Math.random()*2-1;
+  const s=c.createBufferSource(),f=c.createBiquadFilter(),v=c.createGain();
+  s.buffer=b;f.type='highpass';f.frequency.value=hp;
+  v.gain.setValueAtTime(g,t0);v.gain.exponentialRampToValueAtTime(.001,t0+dur);
+  s.connect(f);f.connect(v);v.connect(master);s.start(t0);
+}
+const SOUNDS=[
+ {id:'dog',name:'Dog bark',desc:'Two unmistakable bark pops',play:(c,t)=>{[0,.22].forEach(d=>tone(c,t+d,{type:'sawtooth',f:[[0,420],[.12,200]],dur:.14,g:.4,lp:1400}))}},
+ {id:'cat',name:'Cat meow',desc:'A sliding, whiny meow',play:(c,t)=>tone(c,t,{type:'triangle',f:[[0,500],[.15,900],[.5,520]],dur:.55,g:.4})},
+ {id:'cow',name:'Cow moo',desc:'A deep, long farm moo',play:(c,t)=>tone(c,t,{type:'sawtooth',f:[[0,140],[.3,120],[.9,95]],dur:1,g:.35,lp:500})},
+ {id:'frog',name:'Frog croak',desc:'Two low buzzy ribbits',play:(c,t)=>{[0,.2].forEach(d=>tone(c,t+d,{type:'square',f:[[0,110],[.12,170]],dur:.15,g:.25,lp:600}))}},
+ {id:'duck',name:'Duck quack',desc:'Two nasal honking quacks',play:(c,t)=>{[0,.25].forEach(d=>tone(c,t+d,{type:'sawtooth',f:[[0,700],[.12,450]],dur:.16,g:.3,lp:1800}))}},
+ {id:'owl',name:'Owl hoot',desc:'Two soft round hoo-hoos',play:(c,t)=>{[0,.4].forEach(d=>tone(c,t+d,{type:'sine',f:[[0,380],[.2,330]],dur:.3,g:.5}))}},
+ {id:'rooster',name:'Rooster',desc:'A rising, playful call',play:(c,t)=>{tone(c,t,{type:'sawtooth',f:[[0,400],[.2,900]],dur:.25,g:.3,lp:2500});tone(c,t+.28,{type:'sawtooth',f:[[0,850],[.45,550]],dur:.5,g:.3,lp:2500})}},
+ {id:'elephant',name:'Elephant',desc:'A blaring rising trumpet',play:(c,t)=>tone(c,t,{type:'sawtooth',f:[[0,200],[.5,520],[.9,440]],dur:1,g:.35,lp:1800})},
+ {id:'horn',name:'Air horn',desc:'A short, bold room signal',play:(c,t)=>{tone(c,t,{type:'sawtooth',f:[[0,440]],dur:.6,g:.3,lp:2000});tone(c,t,{type:'sawtooth',f:[[0,554]],dur:.6,g:.25,lp:2000})}},
+ {id:'whistle',name:'Whistle',desc:'A clear, high referee whistle',play:(c,t)=>tone(c,t,{type:'sine',f:[[0,2600],[.15,3000],[.5,2800]],dur:.6,g:.35})},
+ {id:'siren',name:'Siren',desc:'Rapid hi-lo emergency sweeps',play:(c,t)=>tone(c,t,{type:'square',f:[[0,600],[.25,1000],[.5,600],[.75,1000],[1,600]],dur:1,g:.2,lp:2500})},
+ {id:'crash',name:'Crash',desc:'A quick cymbal-style burst',play:(c,t)=>noise(c,t,.9,.5,5000)},
+ {id:'lion',name:'Lion roar',desc:'A powerful deep roar',play:(c,t)=>{tone(c,t,{type:'sawtooth',f:[[0,90],[.3,160],[1,70]],dur:1.1,g:.4,lp:700});noise(c,t,1,.15,300)}},
+ {id:'croc',name:'Crocodile',desc:'A guttural growl and jaw snap',play:(c,t)=>{tone(c,t,{type:'sawtooth',f:[[0,70],[.5,55]],dur:.6,g:.45,lp:350});noise(c,t+.6,.08,.5,1500)}},
+ {id:'cheetah',name:'Cheetah',desc:'A chirping call and sharp growl',play:(c,t)=>{tone(c,t,{type:'sine',f:[[0,1400],[.1,2200],[.2,1500]],dur:.25,g:.35});tone(c,t+.3,{type:'sawtooth',f:[[0,160],[.3,100]],dur:.4,g:.3,lp:600})}},
+ {id:'horse',name:'Horse',desc:'A loud, clear whinny',play:(c,t)=>tone(c,t,{type:'sawtooth',f:[[0,600],[.15,1100],[.4,900],[.8,500]],dur:.9,g:.3,lp:2200})},
+];
+const soundById=id=>SOUNDS.find(s=>s.id===id)||SOUNDS[0];
+function playSound(id,vol){
+  const c=audio();master.gain.value=vol;soundById(id).play(c,c.currentTime+.01);
+}
+
+/* ---------- State ---------- */
+const COLORS=[['Coral','#f5a99a'],['Sky','#9fc5e8'],['Mint','#a8d5c0'],['Lavender','#c5b3e6'],['Peach','#f3c4a0'],['Teal','#7ec4c1'],['Rose','#e8a0b5'],['Amber','#e8c870'],['Indigo','#a5aedc'],['Sage','#b4c9a8']];
+const REDIRECTS=['Blurting out / not raising hand','Calling out','Out of seat','Side talking','Not following directions','Off task','Disrupting others','Hands on others','Misusing materials','Disrespectful tone'];
+const POSITIVES=['Showed kindness','Helped a classmate','Great effort','Followed directions','Participated well','Raised hand'];
+const KEY='quietcue.v1';
+const uid=()=>Math.random().toString(36).slice(2,10);
+let S=load();
+function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.classes)return s}catch(e){}return{classes:[],events:[],active:null,volume:1}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+const ui={tab:'class',search:'',showPos:false,repStudent:'',repDate:new Date().toISOString().slice(0,10),adding:{color:0,sound:'dog'},bannerDismissed:false};
+const cls=()=>S.classes.find(c=>c.id===S.active)||S.classes[0];
+const stu=(c,id)=>c&&c.students.find(s=>s.id===id);
+const initials=n=>n.trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+const esc=s=>String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+const dayKey=ts=>{const d=new Date(ts);return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)};
+const fmtT=ts=>new Date(ts).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});
+const fmtD=k=>new Date(k+'T12:00').toLocaleDateString([], {weekday:'short',month:'short',day:'numeric',year:'numeric'});
+
+function demo(){
+  const names=['Ava Chen','Marcus Lee','Sofia Rivera','Noah Patel','Emma Brooks','Liam Nguyen','Mia Johnson','Ethan Garcia','Olivia Kim','Lucas Wright','Harper Diaz','Jackson Park'];
+  const snd=['dog','cat','cow','frog','duck','owl','rooster','elephant','horn','whistle','siren','crash'];
+  const mk=name=>({id:uid(),name,students:names.map((n,i)=>({id:uid(),name:n,color:i%COLORS.length,sound:snd[i],score:0}))});
+  S={classes:[mk('4A'),mk('4B')],events:[],active:null,volume:1};S.active=S.classes[0].id;
+  save();render();
+}
+function fresh(){S={classes:[{id:uid(),name:'My Class',students:[]}],events:[],active:null,volume:1};S.active=S.classes[0].id;ui.tab='roster';save();render();}
+
+/* ---------- Events ---------- */
+function logEvent(st,type,label,delta=0,note=''){
+  const c=cls();S.events.push({id:uid(),classId:c.id,studentId:st.id,ts:Date.now(),type,label,delta,note});
+  st.score+=delta;save();
+}
+function todayCount(){const c=cls(),k=dayKey(Date.now());return S.events.filter(e=>e.classId===c.id&&e.type==='cue'&&dayKey(e.ts)===k).length}
+function cue(st,el){
+  playSound(st.sound,S.volume);logEvent(st,'cue','Quiet cue');
+  if(el){el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),350)}
+  toast('Cued '+st.name);refreshCounts();
+}
+function undo(){
+  const c=cls();for(let i=S.events.length-1;i>=0;i--){const e=S.events[i];
+    if(e.classId===c.id&&e.type==='cue'){S.events.splice(i,1);save();toast('Undid last cue');render();return}}
+}
+function adjust(st,d){logEvent(st,'score',d>0?'Point added':'Point removed',d);render()}
+let tt;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(tt);tt=setTimeout(()=>t.classList.remove('on'),1400)}
+function refreshCounts(){const e=document.getElementById('cnt');if(e)e.textContent=todayCount();const u=document.getElementById('undo');if(u)u.disabled=!todayCount()}
+
+/* ---------- Modal ---------- */
+const mask=document.getElementById('mask'),modal=document.getElementById('modal');
+mask.addEventListener('click',e=>{if(e.target===mask)closeModal()});
+function closeModal(){mask.classList.remove('on')}
+function openMenu(st){
+  const c=cls();
+  const opt=(arr,kind,d)=>arr.map((l,i)=>`<div class="opt ${kind}"><button class="main" data-k="${kind}" data-i="${i}">${esc(l)}</button><button class="note" data-k="${kind}" data-i="${i}" data-n="1" title="Add a note">…</button></div>`).join('');
+  modal.innerHTML=`<div class="row" style="margin-bottom:12px"><div class="av sm" style="background:${COLORS[st.color][1]}">${esc(initials(st.name))}</div>
+    <div class="sp"><b style="font-size:17px">What happened?</b><br><small style="color:var(--muted)">${esc(st.name)}</small></div><button class="pill ghost" id="mclose">Close</button></div>
+    <div class="card row" style="margin-bottom:10px"><span class="sp">Adjust score (silent)</span><button class="sq" id="mm">−</button><button class="sq" id="mp">+</button></div>
+    ${opt(REDIRECTS,'redirect')}
+    <h3>POSITIVES</h3>
+    ${opt(POSITIVES,'positive')}`;
+  mask.classList.add('on');
+  modal.querySelector('#mclose').onclick=closeModal;
+  modal.querySelector('#mm').onclick=()=>{adjust(st,-1);openMenu(st)};
+  modal.querySelector('#mp').onclick=()=>{adjust(st,1);openMenu(st)};
+  modal.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>{
+    const kind=b.dataset.k,label=(kind==='redirect'?REDIRECTS:POSITIVES)[+b.dataset.i];
+    let note='';if(b.dataset.n){note=prompt('Add a note for '+st.name+' ('+label+')','');if(note===null)return}
+    logEvent(st,kind,label,kind==='redirect'?-1:1,note);closeModal();toast((kind==='redirect'?'Redirect':'Positive')+' logged for '+st.name);render();
+  });
+}
+
+/* ---------- Views ---------- */
+const $=s=>document.querySelector(s);
+function render(){
+  const app=$('#app');
+  const banner=$('#banner');
+  if(!S.classes.length){banner.hidden=true;app.innerHTML=landing();$('#demo').onclick=demo;$('#fresh').onclick=fresh;return}
+  banner.hidden=ui.bannerDismissed;
+  banner.innerHTML='This device keeps your roster locally — export a backup from the Roster tab <button id="bx">OK</button>';
+  const bx=$('#bx');if(bx)bx.onclick=()=>{ui.bannerDismissed=true;banner.hidden=true};
+  const c=cls();if(c&&S.active!==c.id)S.active=c.id;
+  app.innerHTML=`<header><div class="bar">
+    <div class="brand"><span style="font-size:22px">🔔</span><div><b>QuietCue</b><small>Quiet classroom cues</small></div></div>
+    <div class="tabs">${S.classes.map(k=>`<button data-c="${k.id}" class="${k.id===c.id?'on':''}">${esc(k.name)}</button>`).join('')}</div>
+    <span class="sp"></span>
+    <button class="pill" id="addc">+ Class</button><button class="pill" id="renc">Rename</button><button class="pill ghost" id="delc">Delete</button>
+  </div></header>
+  <main>${ui.tab==='class'?classView(c):ui.tab==='roster'?rosterView(c):ui.tab==='report'?reportView(c):soundsView()}</main>
+  <nav><div>${[['class','🏫','Class'],['roster','👥','Roster'],['report','📋','Report'],['sounds','🎵','Sounds']].map(([k,i,l])=>`<button data-t="${k}" class="${ui.tab===k?'on':''}"><span>${i}</span>${l}</button>`).join('')}</div></nav>`;
+  app.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{S.active=b.dataset.c;save();render()});
+  app.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{ui.tab=b.dataset.t;render();scrollTo(0,0)});
+  $('#addc').onclick=()=>{const n=prompt('Class name');if(n&&n.trim()){const k={id:uid(),name:n.trim(),students:[]};S.classes.push(k);S.active=k.id;save();render()}};
+  $('#renc').onclick=()=>{const n=prompt('Rename class',c.name);if(n&&n.trim()){c.name=n.trim();save();render()}};
+  $('#delc').onclick=()=>{if(confirm('Delete class "'+c.name+'" and its history?')){S.classes=S.classes.filter(k=>k!==c);S.events=S.events.filter(e=>e.classId!==c.id);S.active=S.classes[0]&&S.classes[0].id;save();render()}};
+  ({class:bindClass,roster:bindRoster,report:bindReport,sounds:bindSounds})[ui.tab](c);
+}
+function landing(){return`<div class="hero"><div style="font-size:42px">🔔</div><h1>QuietCue</h1>
+  <p>Quiet, private cues for elementary classrooms. Tap a student to play their sound — no public call-outs, just calm redirects and warm celebrations.</p>
+  <ul><li>Tap for a private audio cue + automatic log</li><li>Long-press to note redirects or positive moments</li><li>Daily reports ready to share with families</li><li>Works offline — data stays on this device</li></ul>
+  <div class="btns"><button class="btn" id="demo">Try with demo class</button><button class="btn alt" id="fresh">Start fresh roster</button></div>
+  <p style="font-size:12px;color:var(--muted)">Data stays on this device via localStorage.</p></div>`}
+
+function classView(c){
+  const q=ui.search.toLowerCase();
+  const list=c.students.filter(s=>s.name.toLowerCase().includes(q));
+  return`<div class="row"><input type="search" id="q" placeholder="Search students…" value="${esc(ui.search)}"><span class="pill">Cues today <b id="cnt">${todayCount()}</b></span></div>
+  <div class="card row" style="margin-top:12px"><span style="color:var(--muted)">Cue volume</span><input type="range" id="vol" min="0.05" max="1" step="0.05" value="${S.volume}"><button class="pill" id="undo" ${todayCount()?'':'disabled'}>Undo last cue</button></div>
+  ${c.students.length?`<div class="grid">${list.map(s=>`<div class="stu" data-s="${s.id}" role="button" tabindex="0" aria-label="Cue ${esc(s.name)}">
+    <div class="av" style="background:${COLORS[s.color][1]}">${esc(initials(s.name))}</div><div class="nm">${esc(s.name)}</div>
+    <div class="sc ${s.score>0?'pos':s.score<0?'neg':''}">${s.score}</div>
+    <div class="adj"><button data-d="-1" aria-label="Decrease score for ${esc(s.name)}">−</button><button data-d="1" aria-label="Increase score for ${esc(s.name)}">+</button></div></div>`).join('')}</div>
+  <p class="hint">Tap to cue · Hold for menu · Scroll freely · −/+ adjusts score silently</p>`:`<div class="empty">No students yet. Add some in the Roster tab.</div>`}`;
+}
+function bindClass(c){
+  $('#q').oninput=e=>{ui.search=e.target.value;const p=e.target.selectionStart;render();const q=$('#q');q.focus();q.setSelectionRange(p,p)};
+  $('#vol').oninput=e=>{S.volume=+e.target.value;save()};
+  $('#vol').onchange=()=>{const s=c.students[0];if(s)playSound(s.sound,S.volume)};
+  $('#undo').onclick=undo;
+  document.querySelectorAll('.stu').forEach(el=>{
+    const st=stu(c,el.dataset.s);let timer,sx,sy,fired=false,moved=false;
+    el.onpointerdown=e=>{if(e.target.closest('.adj'))return;fired=moved=false;sx=e.clientX;sy=e.clientY;
+      timer=setTimeout(()=>{fired=true;if(navigator.vibrate)navigator.vibrate(15);openMenu(st)},500)};
+    el.onpointermove=e=>{if(Math.hypot(e.clientX-sx,e.clientY-sy)>8){moved=true;clearTimeout(timer)}};
+    el.onpointerup=e=>{clearTimeout(timer);if(e.target.closest('.adj')||fired||moved)return;cue(st,el)};
+    el.onpointercancel=()=>clearTimeout(timer);
+    el.oncontextmenu=e=>e.preventDefault();
+    el.onkeydown=e=>{if((e.key==='Enter'||e.key===' ')&&e.target===el){e.preventDefault();cue(st,el)}};
+    el.querySelectorAll('.adj button').forEach(b=>b.onclick=e=>{e.stopPropagation();adjust(st,+b.dataset.d)});
+  });
+}
+
+function rosterView(c){
+  const a=ui.adding;
+  return`<div class="row"><b style="font-size:18px" class="sp">Edit roster</b><button class="pill" id="sort">Sort A–Z</button></div>
+  <p style="color:var(--muted)">${c.students.length} students</p>
+  <div class="card"><div class="row"><input type="text" id="nn" placeholder="Student name" style="flex:1"><button class="btn" id="add">Add student</button></div>
+  <h3>Avatar color</h3><div class="sw">${COLORS.map(([n,h],i)=>`<button data-col="${i}" title="${n}" class="${a.color===i?'on':''}" style="background:${h}"></button>`).join('')}</div>
+  <h3>Cue sound</h3><div class="row"><select id="ns">${SOUNDS.map(s=>`<option value="${s.id}" ${a.sound===s.id?'selected':''}>${s.name}</option>`).join('')}</select><button class="pill" id="nsp">Preview</button></div></div>
+  <div class="list">${c.students.map(s=>`<div class="item" data-s="${s.id}"><div class="av sm" style="background:${COLORS[s.color][1]}">${esc(initials(s.name))}</div>
+    <div class="grow"><b>${esc(s.name)}</b><br><small>${COLORS[s.color][0]} · ${soundById(s.sound).name}</small></div>
+    <select data-snd>${SOUNDS.map(x=>`<option value="${x.id}" ${s.sound===x.id?'selected':''}>${x.name}</option>`).join('')}</select>
+    <button class="sq" data-ren title="Rename">✎</button><button class="sq" data-del title="Remove">✕</button></div>`).join('')}</div>
+  <div class="row" style="margin-top:18px"><button class="btn alt" id="exp">Export backup</button><label class="btn alt">Import backup<input type="file" id="imp" accept="application/json" hidden></label><button class="btn danger" id="reset">Reset today's scores</button></div>`;
+}
+function bindRoster(c){
+  const a=ui.adding;
+  document.querySelectorAll('[data-col]').forEach(b=>b.onclick=()=>{a.color=+b.dataset.col;document.querySelectorAll('[data-col]').forEach(x=>x.classList.toggle('on',x===b))});
+  $('#ns').onchange=e=>a.sound=e.target.value;
+  $('#nsp').onclick=()=>playSound(a.sound,S.volume);
+  const add=()=>{const i=$('#nn'),n=i.value.trim();if(!n)return;c.students.push({id:uid(),name:n,color:a.color,sound:a.sound,score:0});
+    a.color=(a.color+1)%COLORS.length;a.sound=SOUNDS[(SOUNDS.findIndex(s=>s.id===a.sound)+1)%SOUNDS.length].id;save();render();$('#nn').focus()};
+  $('#add').onclick=add;$('#nn').onkeydown=e=>{if(e.key==='Enter')add()};
+  $('#sort').onclick=()=>{c.students.sort((x,y)=>x.name.localeCompare(y.name));save();render()};
+  document.querySelectorAll('.item').forEach(el=>{const st=stu(c,el.dataset.s);
+    el.querySelector('[data-snd]').onchange=e=>{st.sound=e.target.value;save();playSound(st.sound,S.volume);render()};
+    el.querySelector('[data-ren]').onclick=()=>{const n=prompt('Student name',st.name);if(n&&n.trim()){st.name=n.trim();save();render()}};
+    el.querySelector('[data-del]').onclick=()=>{if(confirm('Remove '+st.name+'?')){c.students=c.students.filter(x=>x!==st);S.events=S.events.filter(e=>e.studentId!==st.id);save();render()}};
+  });
+  $('#reset').onclick=()=>{if(confirm('Set all scores in this class to 0?')){c.students.forEach(s=>s.score=0);save();toast('Scores reset');render()}};
+  $('#exp').onclick=()=>{const u=URL.createObjectURL(new Blob([JSON.stringify(S)],{type:'application/json'}));const l=document.createElement('a');l.href=u;l.download='quietcue-backup.json';l.click();URL.revokeObjectURL(u)};
+  $('#imp').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{const d=JSON.parse(t);if(!d.classes)throw 0;if(confirm('Replace all current data with this backup?')){S=d;save();render()}}catch(x){alert('That file is not a valid backup.')}})};
+}
+
+function reportData(c){
+  const k=ui.repDate;
+  return S.events.filter(e=>e.classId===c.id&&dayKey(e.ts)===k&&(!ui.repStudent||e.studentId===ui.repStudent));
+}
+function summarize(c,st,evs){
+  const cues=evs.filter(e=>e.type==='cue').length,red=evs.filter(e=>e.type==='redirect'),pos=evs.filter(e=>e.type==='positive');
+  return`Hi! Here is ${st.name}'s day in ${c.name} on ${fmtD(ui.repDate)}.\n`+
+   (pos.length?`Highlights: ${pos.map(e=>e.label.toLowerCase()+(e.note?` (${e.note})`:'')).join('; ')}.\n`:'')+
+   (red.length?`Things we're working on: ${red.map(e=>e.label.toLowerCase()+(e.note?` (${e.note})`:'')).join('; ')}.\n`:'')+
+   `Quiet cues: ${cues}. Thank you for your support!`;
+}
+function reportView(c){
+  const evs=reportData(c).sort((a,b)=>a.ts-b.ts),sel=stu(c,ui.repStudent);
+  const n=t=>evs.filter(e=>e.type===t).length,pts=evs.reduce((a,e)=>a+e.delta,0);
+  return`<div class="row noprint"><input type="date" id="rd" value="${ui.repDate}"><select id="rs"><option value="">All students</option>${c.students.map(s=>`<option value="${s.id}" ${s.id===ui.repStudent?'selected':''}>${esc(s.name)}</option>`).join('')}</select></div>
+  <h2 style="margin:16px 0 0">${sel?esc(sel.name):esc(c.name)}</h2><div style="color:var(--muted)">${fmtD(ui.repDate)}</div>
+  <div class="stats"><div><b>${n('cue')}</b><small>Cues</small></div><div><b>${n('redirect')}</b><small>Redirects</small></div><div><b>${n('positive')}</b><small>Positives</small></div><div><b>${pts}</b><small>Points</small></div></div>
+  <h3>TIMELINE</h3>${evs.length?evs.map(e=>{const s=stu(c,e.studentId);return`<div class="tl"><time>${fmtT(e.ts)}</time><div class="t-${e.type}">${sel?'':`<b>${esc(s?s.name:'?')}</b> · `}${esc(e.label)}${e.note?` — <i>${esc(e.note)}</i>`:''}</div></div>`}).join(''):'<div class="empty">Nothing logged for this day.</div>'}
+  <div class="row noprint" style="margin-top:18px"><button class="btn" id="copy" ${sel?'':'disabled'}>Copy summary</button><button class="btn alt" id="print">Print-friendly</button></div>
+  ${sel?'':'<p class="hint noprint">Pick a student to copy a family-friendly summary.</p>'}`;
+}
+function bindReport(c){
+  $('#rd').onchange=e=>{ui.repDate=e.target.value||ui.repDate;render()};
+  $('#rs').onchange=e=>{ui.repStudent=e.target.value;render()};
+  $('#print').onclick=()=>print();
+  $('#copy').onclick=()=>{const st=stu(c,ui.repStudent);if(!st)return;const t=summarize(c,st,reportData(c));
+    (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast('Summary copied'),()=>prompt('Copy this summary:',t))};
+}
+
+function soundsView(){
+  return`<b style="font-size:18px">Sound library</b><p style="color:var(--muted)">Sixteen synthesized sounds — distinctive but soft enough for a calm classroom. Preview any sound, then assign it on the Roster.</p>
+  <div class="card row"><span style="color:var(--muted)">Volume</span><input type="range" id="vol" min="0.05" max="1" step="0.05" value="${S.volume}"></div>
+  <div class="list">${SOUNDS.map(s=>`<div class="item"><div class="grow"><b>${s.name}</b><br><small>${s.desc}</small></div><button class="pill" data-p="${s.id}">Preview</button></div>`).join('')}</div>`;
+}
+function bindSounds(){
+  $('#vol').oninput=e=>{S.volume=+e.target.value;save()};
+  document.querySelectorAll('[data-p]').forEach(b=>b.onclick=()=>playSound(b.dataset.p,S.volume));
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+render();
+</script>
+</body>
+</html>
