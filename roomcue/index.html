@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>QuietCue</title>
 <meta name="description" content="Quiet, private cues for elementary classrooms.">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
   --bg:#f4f1ea;--panel:#fff;--ink:#23272a;--muted:#8a8d90;--line:#e6dfcf;--accent:#6b9680;--accent-d:#4f7a64;
@@ -155,78 +154,82 @@ function load(){try{const s=JSON.parse(localStorage.getItem(KEY));if(s&&s.classe
 function saveLocal(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
 function save(){S.updatedAt=Date.now();saveLocal();schedulePush()}
 
-/* ---------- Cloud sync (Supabase) ---------- */
-// Paste your Supabase project URL and public anon key (Project Settings -> API). See SETUP.md.
-const SUPABASE_URL='',SUPABASE_ANON_KEY='';
-let sb=null,user=null,pushT=null,syncing=false;
+/* ---------- Cloud sync (shared passcode, via /api/state) ---------- */
+const SYNC_KEY='quietcue.sync';
+let syncKey=null;try{syncKey=localStorage.getItem(SYNC_KEY)}catch(e){}
+let pushT=null,syncing=false;
+async function deriveKey(pass){
+  const enc=new TextEncoder();
+  const base=await crypto.subtle.importKey('raw',enc.encode(pass.trim()),'PBKDF2',false,['deriveBits']);
+  const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:enc.encode('quietcue-sync-v1'),iterations:150000,hash:'SHA-256'},base,256);
+  return [...new Uint8Array(bits)].map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+async function apiGet(){
+  const r=await fetch('/api/state?key='+syncKey,{cache:'no-store'});
+  if(r.status===404)return null;
+  if(!r.ok)throw new Error('http '+r.status);
+  return r.json();
+}
+async function apiPut(){
+  const r=await fetch('/api/state?key='+syncKey,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(S)});
+  if(!r.ok)throw new Error('http '+r.status);
+}
 function initSync(){
-  if(!SUPABASE_URL||!SUPABASE_ANON_KEY||!window.supabase)return;
-  sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
-  sb.auth.onAuthStateChange((ev,sess)=>{
-    const was=user&&user.id;user=sess&&sess.user||null;
-    if(user&&user.id!==was)pull(true);
-    render();
-  });
-  setInterval(()=>{if(user&&!document.hidden)pull(false)},15000);
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&user)pull(false)});
+  if(syncKey)pull(false);
+  setInterval(()=>{if(syncKey&&!document.hidden)pull(false)},15000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&syncKey)pull(false)});
 }
 async function pull(first){
-  if(!sb||!user||syncing)return;
+  if(!syncKey||syncing)return;
   syncing=true;
   try{
-    const {data,error}=await sb.from('quietcue_state').select('data').eq('user_id',user.id).maybeSingle();
-    if(error)throw error;
-    const remote=data&&data.data,rt=remote&&remote.updatedAt||0,lt=S.updatedAt||0;
+    const remote=await apiGet(),rt=remote&&remote.updatedAt||0,lt=S.updatedAt||0;
     if(remote&&rt!==lt){
       let useRemote=rt>lt;
-      if(first&&S.classes.length&&rt!==lt)
-        useRemote=confirm('Your cloud account already has a roster.\n\nOK = load the cloud roster on this device.\nCancel = replace the cloud roster with this device.');
+      if(first&&S.classes.length)
+        useRemote=confirm('This passcode already has a roster saved.\n\nOK = load the saved roster on this device.\nCancel = replace the saved roster with this device.');
       if(!first&&useRemote&&mask.classList.contains('on'))return;
       if(useRemote){S=remote;saveLocal();render();if(first)toast('Synced from cloud');return}
     }
-    if(!remote||lt>rt)await push();
+    if(!remote||lt>rt)await apiPut();
   }catch(e){toast('Sync problem — will retry')}
   finally{syncing=false}
 }
-async function push(){
-  if(!sb||!user)return;
-  const {error}=await sb.from('quietcue_state').upsert({user_id:user.id,data:S,updated_at:new Date().toISOString()});
-  if(error)throw error;
-}
 function schedulePush(){
-  if(!sb||!user)return;
-  clearTimeout(pushT);pushT=setTimeout(()=>push().catch(()=>toast('Sync failed — will retry')),1200);
+  if(!syncKey)return;
+  clearTimeout(pushT);pushT=setTimeout(()=>apiPut().catch(()=>toast('Sync failed — will retry')),1200);
 }
-function openAuth(){
-  if(!sb)return;
-  if(user){
-    modal.innerHTML=`<div class="row" style="margin-bottom:12px"><b class="sp" style="font-size:17px">Account</b><button class="pill ghost" id="aclose">Close</button></div>
-      <p>Signed in as <b>${esc(user.email)}</b>. Your roster and logs sync across your devices.</p>
-      <div class="row"><button class="btn alt" id="async">Sync now</button><button class="btn danger" id="aout">Sign out</button></div>`;
+function openSync(){
+  if(syncKey){
+    modal.innerHTML=`<div class="row" style="margin-bottom:12px"><b class="sp" style="font-size:17px">Sync is on</b><button class="pill ghost" id="aclose">Close</button></div>
+      <p>This device is syncing with your passcode. Open QuietCue on your phone, choose <b>Sync devices</b>, and enter the same passcode.</p>
+      <div class="row"><button class="btn alt" id="async">Sync now</button><button class="btn danger" id="aout">Turn off on this device</button></div>`;
     mask.classList.add('on');
     $('#aclose').onclick=closeModal;
     $('#async').onclick=()=>{pull(false);closeModal();toast('Syncing…')};
-    $('#aout').onclick=async()=>{await sb.auth.signOut();closeModal();toast('Signed out')};
+    $('#aout').onclick=()=>{syncKey=null;try{localStorage.removeItem(SYNC_KEY)}catch(e){}closeModal();toast('Sync turned off');render()};
     return;
   }
-  modal.innerHTML=`<div class="row" style="margin-bottom:12px"><b class="sp" style="font-size:17px">Sign in to sync</b><button class="pill ghost" id="aclose">Close</button></div>
-    <div class="list" style="margin-top:0"><input type="email" id="aem" placeholder="Email" autocomplete="email">
-    <input type="password" id="apw" placeholder="Password (6+ characters)" autocomplete="current-password">
+  modal.innerHTML=`<div class="row" style="margin-bottom:12px"><b class="sp" style="font-size:17px">Sync your devices</b><button class="pill ghost" id="aclose">Close</button></div>
+    <p style="margin-top:0">Pick a private passcode and enter the <b>same one</b> on each device. Use a long phrase (10+ characters) — anyone who knows it can see this data, so keep student names out of anything shared.</p>
+    <div class="list" style="margin-top:0"><input type="password" id="apw" placeholder="Passcode (10+ characters)" autocomplete="off">
     <div id="amsg" style="color:var(--warn);min-height:20px;font-size:13px"></div>
-    <div class="row"><button class="btn" id="ain">Sign in</button><button class="btn alt" id="aup">Create account</button></div></div>`;
+    <div class="row"><button class="btn" id="ain">Connect</button></div></div>`;
   mask.classList.add('on');
   $('#aclose').onclick=closeModal;
-  const go=async mode=>{
-    const email=$('#aem').value.trim(),password=$('#apw').value,msg=$('#amsg');
-    if(!email||password.length<6){msg.textContent='Enter an email and a password of at least 6 characters.';return}
-    msg.style.color='var(--muted)';msg.textContent='Working…';
-    const r=mode==='in'?await sb.auth.signInWithPassword({email,password}):await sb.auth.signUp({email,password});
-    if(r.error){msg.style.color='var(--warn)';msg.textContent=r.error.message;return}
-    if(!r.data.session){msg.textContent='Check your email to confirm your account, then sign in.';return}
-    closeModal();toast('Signed in');
+  const go=async()=>{
+    const pw=$('#apw').value.trim(),msg=$('#amsg');
+    if(pw.length<10){msg.textContent='Use at least 10 characters.';return}
+    if(!(window.crypto&&crypto.subtle)){msg.textContent='Sync needs a secure (https) connection.';return}
+    msg.style.color='var(--muted)';msg.textContent='Connecting…';
+    try{
+      syncKey=await deriveKey(pw);
+      await apiGet();
+    }catch(e){syncKey=null;msg.style.color='var(--warn)';msg.textContent='Cloud storage is not available yet. Check the setup steps and try again.';return}
+    try{localStorage.setItem(SYNC_KEY,syncKey)}catch(e){}
+    closeModal();render();pull(true);
   };
-  $('#ain').onclick=()=>go('in');$('#aup').onclick=()=>go('up');
-  $('#apw').onkeydown=e=>{if(e.key==='Enter')go('in')};
+  $('#ain').onclick=go;$('#apw').onkeydown=e=>{if(e.key==='Enter')go()};
 }
 const ui={tab:'class',search:'',showPos:false,repStudent:'',repDate:new Date().toISOString().slice(0,10),adding:{color:0,sound:'dog'},bannerDismissed:false};
 const cls=()=>S.classes.find(c=>c.id===S.active)||S.classes[0];
@@ -294,23 +297,22 @@ const $=s=>document.querySelector(s);
 function render(){
   const app=$('#app');
   const banner=$('#banner');
-  if(!S.classes.length){banner.hidden=true;app.innerHTML=landing();$('#demo').onclick=demo;$('#fresh').onclick=fresh;if(sb)$('#lsign').onclick=openAuth;return}
-  banner.hidden=ui.bannerDismissed||(sb&&!!user);
-  banner.innerHTML=sb?'This device has your roster but is not signed in — Sign in to sync to other devices <button id="bx">Sign in</button>'
-    :'This device keeps your roster locally — export a backup from the Roster tab <button id="bx">OK</button>';
-  const bx=$('#bx');if(bx)bx.onclick=()=>{if(sb)openAuth();else{ui.bannerDismissed=true;banner.hidden=true}};
+  if(!S.classes.length){banner.hidden=true;app.innerHTML=landing();$('#demo').onclick=demo;$('#fresh').onclick=fresh;$('#lsign').onclick=openSync;return}
+  banner.hidden=ui.bannerDismissed||!!syncKey;
+  banner.innerHTML='This device keeps your roster locally — sync it to your phone with a passcode <button id="bx">Set up sync</button>';
+  const bx=$('#bx');if(bx)bx.onclick=openSync;
   const c=cls();if(c&&S.active!==c.id)S.active=c.id;
   app.innerHTML=`<header><div class="bar">
     <div class="brand"><span style="font-size:22px">🔔</span><div><b>QuietCue</b><small>Quiet classroom cues</small></div></div>
     <div class="tabs">${S.classes.map(k=>`<button data-c="${k.id}" class="${k.id===c.id?'on':''}">${esc(k.name)}</button>`).join('')}</div>
     <span class="sp"></span>
-    ${sb?`<button class="pill ${user?'':'dark'}" id="acct">${user?'Synced · '+esc(user.email):'Sign up / Sign in'}</button>`:''}<button class="pill" id="addc">+ Class</button><button class="pill" id="renc">Rename</button><button class="pill ghost" id="delc">Delete</button>
+    <button class="pill ${syncKey?'':'dark'}" id="acct">${syncKey?'Synced':'Sync devices'}</button><button class="pill" id="addc">+ Class</button><button class="pill" id="renc">Rename</button><button class="pill ghost" id="delc">Delete</button>
   </div></header>
   <main>${ui.tab==='class'?classView(c):ui.tab==='roster'?rosterView(c):ui.tab==='report'?reportView(c):soundsView()}</main>
   <nav><div>${[['class','🏫','Class'],['roster','👥','Roster'],['report','📋','Report'],['sounds','🎵','Sounds']].map(([k,i,l])=>`<button data-t="${k}" class="${ui.tab===k?'on':''}"><span>${i}</span>${l}</button>`).join('')}</div></nav>`;
   app.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{S.active=b.dataset.c;save();render()});
   app.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{ui.tab=b.dataset.t;render();scrollTo(0,0)});
-  if(sb)$('#acct').onclick=openAuth;
+  $('#acct').onclick=openSync;
   $('#addc').onclick=()=>{const n=prompt('Class name');if(n&&n.trim()){const k={id:uid(),name:n.trim(),students:[]};S.classes.push(k);S.active=k.id;save();render()}};
   $('#renc').onclick=()=>{const n=prompt('Rename class',c.name);if(n&&n.trim()){c.name=n.trim();save();render()}};
   $('#delc').onclick=()=>{if(confirm('Delete class "'+c.name+'" and its history?')){S.classes=S.classes.filter(k=>k!==c);S.events=S.events.filter(e=>e.classId!==c.id);S.active=S.classes[0]&&S.classes[0].id;save();render()}};
@@ -318,9 +320,9 @@ function render(){
 }
 function landing(){return`<div class="hero"><div style="font-size:42px">🔔</div><h1>QuietCue</h1>
   <p>Quiet, private cues for elementary classrooms. Tap a student to play their sound — no public call-outs, just calm redirects and warm celebrations.</p>
-  <ul><li>Tap for a private audio cue + automatic log</li><li>Long-press to note redirects or positive moments</li><li>Daily reports ready to share with families</li><li>Optional sign-in to sync across devices</li></ul>
-  <div class="btns"><button class="btn" id="demo">Try with demo class</button><button class="btn alt" id="fresh">Start fresh roster</button>${sb?'<button class="btn alt" id="lsign">Sign in to load my synced roster</button>':''}</div>
-  <p style="font-size:12px;color:var(--muted)">${sb?'Sign in to sync across devices; otherwise data stays on this device.':'Data stays on this device via localStorage.'}</p></div>`}
+  <ul><li>Tap for a private audio cue + automatic log</li><li>Long-press to note redirects or positive moments</li><li>Daily reports ready to share with families</li><li>Optional passcode sync across your devices</li></ul>
+  <div class="btns"><button class="btn" id="demo">Try with demo class</button><button class="btn alt" id="fresh">Start fresh roster</button><button class="btn alt" id="lsign">Sync with a passcode</button></div>
+  <p style="font-size:12px;color:var(--muted)">Data stays on this device unless you turn on passcode sync.</p></div>`}
 
 function classView(c){
   const q=ui.search.toLowerCase();
