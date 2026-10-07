@@ -164,6 +164,11 @@ async function deriveKey(pass){
   const bits=await crypto.subtle.deriveBits({name:'PBKDF2',salt:enc.encode('quietcue-sync-v1'),iterations:150000,hash:'SHA-256'},base,256);
   return [...new Uint8Array(bits)].map(b=>b.toString(16).padStart(2,'0')).join('');
 }
+let syncInfo={last:0,err:''};
+function syncLabel(){return syncKey?(syncInfo.err?'Sync problem':'Synced'):(syncAvail?'Sync devices':'Send to phone')}
+function updateSyncPill(){const e=document.getElementById('acct');if(e)e.textContent=syncLabel()}
+function syncOk(){syncInfo.last=Date.now();syncInfo.err='';updateSyncPill()}
+function syncFail(why){syncInfo.err=why;updateSyncPill()}
 async function apiGet(){
   const r=await fetch('/api/state?key='+syncKey,{cache:'no-store'});
   if(r.status===404)return null;
@@ -175,7 +180,7 @@ async function apiPut(){
   const body=JSON.stringify(S);
   const r=await fetch('/api/state?key='+syncKey,{method:'PUT',headers:{'content-type':'application/json'},body,keepalive:body.length<60000});
   if(!r.ok)throw new Error('http '+r.status);
-  dirty=false;
+  dirty=false;syncOk();
 }
 function flushPush(){if(syncKey&&dirty){clearTimeout(pushT);apiPut().catch(()=>{})}}
 function initSync(){
@@ -186,20 +191,22 @@ function initSync(){
   document.addEventListener('visibilitychange',()=>{if(!syncKey)return;if(document.hidden)flushPush();else pull(false)});
   addEventListener('pagehide',flushPush);
 }
-async function pull(first){
-  if(!syncKey||syncing)return;
+async function pull(first,verbose){
+  if(!syncKey||syncing){if(verbose)toast('Already syncing…');return}
   syncing=true;
   try{
     const remote=await apiGet(),rt=remote&&remote.updatedAt||0,lt=S.updatedAt||0;
+    syncOk();
     if(remote&&rt!==lt){
       let useRemote=rt>lt;
       if(first&&S.classes.length)
         useRemote=confirm('This passcode already has a roster saved.\n\nOK = load the saved roster on this device.\nCancel = replace the saved roster with this device.');
-      if(!first&&useRemote&&mask.classList.contains('on'))return;
-      if(useRemote){S=remote;saveLocal();render();if(first)toast('Synced from cloud');return}
+      if(!first&&useRemote&&mask.classList.contains('on')&&!verbose)return;
+      if(useRemote){S=remote;saveLocal();render();if(first||verbose)toast('Loaded the latest roster from your other device');return}
     }
-    if(!remote||lt>rt)await apiPut();
-  }catch(e){toast('Sync problem — will retry')}
+    if(!remote||lt>rt){await apiPut();if(verbose)toast('Sent this device\'s changes');return}
+    if(verbose)toast('Already up to date');
+  }catch(e){syncFail('Could not reach the server');if(verbose)toast('Sync problem — check your connection')}
   finally{syncing=false}
 }
 function schedulePush(){
@@ -245,11 +252,17 @@ async function checkImport(){
 function openSync(){
   if(syncKey){
     modal.innerHTML=`<div class="row" style="margin-bottom:12px"><b class="sp" style="font-size:17px">Sync is on</b><button class="pill ghost" id="aclose">Close</button></div>
-      <p>This device is syncing with your passcode. Open QuietCue on your phone, choose <b>Sync devices</b>, and enter the same passcode.</p>
+      <p style="margin-top:0">This device is syncing with your passcode. On your other device, choose <b>Sync devices</b> and enter the same passcode.</p>
+      <div class="card" style="font-size:14px;line-height:1.7;margin-bottom:12px">
+        <div><b>Passcode ID:</b> <code>${esc(syncKey.slice(0,6))}</code> <span style="color:var(--muted)">(should match on both devices)</span></div>
+        <div><b>Last synced:</b> ${syncInfo.last?new Date(syncInfo.last).toLocaleTimeString([], {hour:'numeric',minute:'2-digit',second:'2-digit'}):'not yet'}</div>
+        <div><b>On this device:</b> ${S.classes.reduce((a,c)=>a+c.students.length,0)} students in ${S.classes.length} class(es)</div>
+        ${syncInfo.err?`<div style="color:var(--warn)"><b>Problem:</b> ${esc(syncInfo.err)}</div>`:''}
+      </div>
       <div class="row"><button class="btn alt" id="async">Sync now</button><button class="btn danger" id="aout">Turn off on this device</button></div>`;
     mask.classList.add('on');
     $('#aclose').onclick=closeModal;
-    $('#async').onclick=()=>{pull(false);closeModal();toast('Syncing…')};
+    $('#async').onclick=()=>{closeModal();pull(false,true)};
     $('#aout').onclick=()=>{syncKey=null;try{localStorage.removeItem(SYNC_KEY)}catch(e){}closeModal();toast('Sync turned off');render()};
     return;
   }
@@ -350,7 +363,7 @@ function render(){
     <div class="brand"><span style="font-size:22px">🔔</span><div><b>QuietCue</b><small>Quiet classroom cues</small></div></div>
     <div class="tabs">${S.classes.map(k=>`<button data-c="${k.id}" class="${k.id===c.id?'on':''}">${esc(k.name)}</button>`).join('')}</div>
     <span class="sp"></span>
-    <button class="pill ${syncKey?'':'dark'}" id="acct">${syncAvail?(syncKey?'Synced':'Sync devices'):'Send to phone'}</button><button class="pill" id="addc">+ Class</button><button class="pill" id="renc">Rename</button><button class="pill ghost" id="delc">Delete</button>
+    <button class="pill ${syncKey?'':'dark'}" id="acct">${syncLabel()}</button><button class="pill" id="addc">+ Class</button><button class="pill" id="renc">Rename</button><button class="pill ghost" id="delc">Delete</button>
   </div></header>
   <main>${ui.tab==='class'?classView(c):ui.tab==='roster'?rosterView(c):ui.tab==='report'?reportView(c):soundsView()}</main>
   <nav><div>${[['class','🏫','Class'],['roster','👥','Roster'],['report','📋','Report'],['sounds','🎵','Sounds']].map(([k,i,l])=>`<button data-t="${k}" class="${ui.tab===k?'on':''}"><span>${i}</span>${l}</button>`).join('')}</div></nav>`;
