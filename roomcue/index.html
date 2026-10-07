@@ -170,15 +170,21 @@ async function apiGet(){
   if(!r.ok)throw new Error('http '+r.status);
   return r.json();
 }
+let dirty=false;
 async function apiPut(){
-  const r=await fetch('/api/state?key='+syncKey,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(S)});
+  const body=JSON.stringify(S);
+  const r=await fetch('/api/state?key='+syncKey,{method:'PUT',headers:{'content-type':'application/json'},body,keepalive:body.length<60000});
   if(!r.ok)throw new Error('http '+r.status);
+  dirty=false;
 }
+function flushPush(){if(syncKey&&dirty){clearTimeout(pushT);apiPut().catch(()=>{})}}
 function initSync(){
   if(syncKey)pull(false);
   else fetch('/api/state?key='+'0'.repeat(64),{cache:'no-store'}).then(r=>{if(r.status===404||r.status===200){syncAvail=true;render()}}).catch(()=>{});
-  setInterval(()=>{if(syncKey&&!document.hidden)pull(false)},15000);
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&syncKey)pull(false)});
+  // Gentle polling (free storage has monthly limits): once a minute while visible, plus on return to the app.
+  setInterval(()=>{if(syncKey&&!document.hidden&&!dirty)pull(false)},60000);
+  document.addEventListener('visibilitychange',()=>{if(!syncKey)return;if(document.hidden)flushPush();else pull(false)});
+  addEventListener('pagehide',flushPush);
 }
 async function pull(first){
   if(!syncKey||syncing)return;
@@ -198,7 +204,7 @@ async function pull(first){
 }
 function schedulePush(){
   if(!syncKey)return;
-  clearTimeout(pushT);pushT=setTimeout(()=>apiPut().catch(()=>toast('Sync failed — will retry')),1200);
+  dirty=true;clearTimeout(pushT);pushT=setTimeout(()=>apiPut().catch(()=>toast('Sync failed — will retry')),10000);
 }
 async function pack(obj){
   const bs=new Blob([JSON.stringify(obj)]).stream().pipeThrough(new CompressionStream('deflate-raw'));
