@@ -18,15 +18,12 @@ module.exports = async (req, res) => {
   }
   const path = `sync/${key}.json`;
   const token = blobToken();
-  if (!token) {
-    const names = Object.keys(process.env).filter((n) => /BLOB|STORE|TOKEN/i.test(n)).join(',') || 'none';
-    return res.status(500).json({ error: 'server error', reason: 'no storage token; related variable names: ' + names });
-  }
+  const auth = token ? { token } : {};
   try {
     if (req.method === 'GET') {
       let meta;
       try {
-        meta = await head(path, { token });
+        meta = await head(path, auth);
       } catch (e) {
         if (e && (e.name === 'BlobNotFoundError' || /does not exist|not found/i.test(e.message || ''))) {
           return res.status(404).json({ error: 'none' });
@@ -43,7 +40,7 @@ module.exports = async (req, res) => {
         return res.status(413).json({ error: 'bad body' });
       }
       await put(path, body, {
-        token,
+        ...auth,
         access: 'public',
         contentType: 'application/json',
         addRandomSuffix: false,
@@ -55,7 +52,10 @@ module.exports = async (req, res) => {
     res.setHeader('Allow', 'GET, PUT');
     return res.status(405).json({ error: 'method not allowed' });
   } catch (e) {
-    const reason = String((e && e.message) || e).replace(/\s+/g, ' ').slice(0, 160);
+    let reason = String((e && e.message) || e).replace(/\s+/g, ' ').slice(0, 160);
+    if (/token|store/i.test(reason)) {
+      reason += ' [vars: ' + (Object.keys(process.env).filter((n) => /BLOB|STORE|OIDC/i.test(n)).join(',') || 'none') + ']';
+    }
     return res.status(500).json({ error: 'server error', reason });
   }
 };
