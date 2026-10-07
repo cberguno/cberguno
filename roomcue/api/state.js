@@ -43,6 +43,7 @@ module.exports = async (req, res) => {
     res.setHeader('Allow', 'GET, PUT');
     return res.status(405).json({ error: 'method not allowed' });
   } catch (e) {
-    return res.status(500).json({ error: 'server error' });
+    const reason = String((e && e.message) || e).replace(/\s+/g, ' ').slice(0, 160);
+    return res.status(500).json({ error: 'server error', reason });
   }
 };
