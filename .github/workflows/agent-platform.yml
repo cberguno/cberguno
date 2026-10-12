@@ -27,4 +27,6 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm --filter @ap/api test
       - run: pnpm build
+      - run: pnpm --filter @ap/web test
       - run: docker build -t agent-platform .
+      - run: docker build --build-arg BROWSER=chromium -t agent-platform-browser .

@@ -9,6 +9,8 @@ import { addSynthesizeTask, expandTasks, extractJson, parseControl, PlanError, r
 import type { ChatMessage } from "./providers/index.js";
 import { budgetStopMission, completeWith, escalateMission, failTask, heartbeat, releaseReady, releaseTask, type Q, type TaskRow } from "./queue.js";
 import { buildSystemPrompt, type AgentRow } from "./runtime.js";
+import { runToolLoop, TOOL_GUIDANCE } from "./tools/agentLoop.js";
+import { grantedTools, selectTools, type ToolRow } from "./tools/registry.js";
 
 export type RunnerDeps = LlmDeps & { workerId: string; leaseMs: number; backoffBaseMs: number; shutdown: AbortSignal };
 
@@ -48,7 +50,7 @@ function rosterText(roster: RosterAgent[], selfId?: string) {
   return roster.filter((a) => a.status === "active").map((a) => `- ${a.name}${a.id === selfId ? " (you)" : ""}: ${a.role} [${a.kind}]`).join("\n");
 }
 
-async function buildMessages(deps: LlmDeps, mission: MissionRow, agent: AgentRow, task: TaskRow, roster: RosterAgent[]): Promise<{ messages: ChatMessage[]; maxTokens: number }> {
+async function buildMessages(deps: LlmDeps, mission: MissionRow, agent: AgentRow, task: TaskRow, roster: RosterAgent[], tools: ToolRow[] = []): Promise<{ messages: ChatMessage[]; maxTokens: number }> {
   const opts = mission.options;
   const parts: string[] = [`Mission: ${mission.title}\nMission goal: ${mission.goal}`, NOTE];
   const mem = await memoryBlock(deps, agent, task);
@@ -68,6 +70,7 @@ async function buildMessages(deps: LlmDeps, mission: MissionRow, agent: AgentRow
     parts.push(`Your task: ${task.title}\n\n${task.input}`);
     if (task.meta.qa?.length) parts.push(`Clarifications you asked for:\n${task.meta.qa.map((x: any) => `Q: ${x.q}\nA: ${x.a}`).join("\n")}`);
     if (task.meta.feedback) parts.push(`A reviewer asked for changes to your previous output. Address this feedback:\n${task.meta.feedback}\n\nYour previous output:\n${clip(task.output, DEP_CHARS)}`);
+    if (tools.length) parts.push(`${TOOL_GUIDANCE}\nAvailable tools: ${tools.map((t) => t.name).join(", ")}.`);
     const canBlock = (task.meta.questions ?? 0) < MAX_QUESTIONS;
     const canDelegate = task.depth < opts.max_depth && !task.meta.delegated; // one delegation round per task: prevents re-delegation loops
     parts.push(
@@ -108,11 +111,21 @@ export async function executeTask(deps: RunnerDeps, task: TaskRow): Promise<void
   const signal = AbortSignal.any([deps.shutdown, timeout]);
   try {
     const roster = await rosterFor(db, mission.team_id);
-    const { messages, maxTokens } = await buildMessages(deps, mission, agent, task, roster);
-    const res = await callModel(deps, agent, messages, {
-      maxTokens, signal, ctx: { missionId: mission.id, taskId: task.id }, missionMaxUsd: mission.max_cost_usd,
-    });
-    await applyResult(deps, mission, agent, task, roster, res.text);
+    // Only `work` tasks use tools, and only the ones this agent is granted right now (default: none).
+    const tools = task.kind === "work" ? selectTools(await grantedTools(db, agent.id), `${task.title} ${task.input}`) : [];
+    let text: string;
+    if (task.kind === "work" && (tools.length || task.transcript)) {
+      const built = task.transcript ? { messages: [] as ChatMessage[], maxTokens: 2048 } : await buildMessages(deps, mission, agent, task, roster, tools);
+      const out = await runToolLoop(deps, { mission, agent, task, base: built.messages, tools, maxTokens: built.maxTokens, maxSteps: mission.options.max_tool_steps ?? 8, signal });
+      if (out.kind === "parked") return; // waiting for a human; the task was saved and released
+      await db.query("UPDATE tasks SET transcript=NULL WHERE id=$1 AND locked_by=$2", [task.id, deps.workerId]);
+      text = out.text;
+    } else {
+      const { messages, maxTokens } = await buildMessages(deps, mission, agent, task, roster);
+      const res = await callModel(deps, agent, messages, { maxTokens, signal, ctx: { missionId: mission.id, taskId: task.id }, missionMaxUsd: mission.max_cost_usd });
+      text = res.text;
+    }
+    await applyResult(deps, mission, agent, task, roster, text);
   } catch (e) {
     if (deps.shutdown.aborted) return void (await releaseTask(db, task.id, deps.workerId));
     if (e instanceof BudgetExceededError && e.scope === "mission") {

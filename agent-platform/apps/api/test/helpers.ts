@@ -38,6 +38,7 @@ export function testConfig(url: string) {
     DATABASE_URL: url,
     PLATFORM_MASTER_KEY: MASTER_KEY,
     JWT_SECRET: "j".repeat(40),
+    TOOL_ALLOW_PRIVATE_HOSTS: "true", // tests talk to localhost servers
     BOOTSTRAP_ADMIN_EMAIL: "admin@example.com",
     BOOTSTRAP_ADMIN_PASSWORD: "correct-horse-battery",
   } as NodeJS.ProcessEnv);

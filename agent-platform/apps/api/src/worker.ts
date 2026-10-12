@@ -3,6 +3,8 @@ import type { Db } from "./db.js";
 import { consolidateMemories } from "./memory.js";
 import type { LlmDeps } from "./llm.js";
 import { claimTask, reapExpired } from "./queue.js";
+import { fireDueSchedules } from "./schedules.js";
+import { expireApprovals } from "./tools/approvals.js";
 import { executeTask } from "./taskRunner.js";
 
 export type WorkerOpts = {
@@ -47,7 +49,7 @@ export class Worker {
       let lastReap = 0, lastConsolidate = Date.now();
       while (this.running) {
         try {
-          if (Date.now() - lastReap >= this.opts.reapMs) { lastReap = Date.now(); await reapExpired(this.db); }
+          if (Date.now() - lastReap >= this.opts.reapMs) { lastReap = Date.now(); await reapExpired(this.db); await expireApprovals(this.db); await fireDueSchedules(this.db); }
           if (Date.now() - lastConsolidate >= this.opts.consolidateEveryMs) { lastConsolidate = Date.now(); await consolidateMemories(this.deps); }
           let started = false;
           while (this.running && (await this.tick())) started = true;

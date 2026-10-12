@@ -58,7 +58,7 @@ describe("durable missions", () => {
         n++;
         return n === 1 ? plan([{ key: "x", title: "X", assignee: "Nobody", input: "i" }]) : TWO;
       }
-      return standard({ agent, user, system: "", n: 1 });
+      return standard({ agent, user, system: "", n: 1, messages: [], toolNames: [] });
     });
     r.worker.start();
     const m = await r.waitFor(await r.create({}), ["succeeded"]);

@@ -1,6 +1,6 @@
 import { open } from "./crypto.js";
 import type { Db } from "./db.js";
-import { adapters as defaultAdapters, ProviderError, type ChatMessage, type ModelProvider, type ProviderKind } from "./providers/index.js";
+import { adapters as defaultAdapters, ProviderError, type ChatMessage, type ModelProvider, type ProviderKind, type ToolCall, type ToolSpec } from "./providers/index.js";
 import { type Candidate, costUsd, loadCandidates, rank, type RoutingSpec } from "./router.js";
 
 /** The subset of an agent row the LLM layer needs. */
@@ -12,7 +12,11 @@ export type AgentLike = {
   daily_budget_usd: number;
 };
 
-export type LlmDeps = { db: Db; masterKey: string; adapters?: Record<ProviderKind, ModelProvider> };
+export type LlmDeps = {
+  db: Db; masterKey: string; adapters?: Record<ProviderKind, ModelProvider>;
+  /** Tools may reach loopback/private addresses (tests, self-hosted internal APIs). Default false: public internet only. */
+  allowPrivateHosts?: boolean;
+};
 
 export class NoModelError extends Error {
   constructor() { super("no eligible model: configure a provider and model"); }
@@ -25,12 +29,14 @@ export class AllModelsFailedError extends Error {
 }
 
 export type ModelCallResult = {
-  text: string; tokensIn: number; tokensOut: number; costUsd: number; latencyMs: number;
+  text: string; toolCalls: ToolCall[]; tokensIn: number; tokensOut: number; costUsd: number; latencyMs: number;
   finishReason: string; modelId: string; modelName: string; providerName: string;
 };
 
 export type CallOpts = {
   maxTokens: number;
+  /** Tools the model may call this turn (already filtered to what the agent is granted). */
+  tools?: ToolSpec[];
   signal?: AbortSignal;
   /** Attribution for usage_events. */
   ctx?: { runId?: string; taskId?: string; missionId?: string };
@@ -85,7 +91,7 @@ export async function callModel(deps: LlmDeps, agent: AgentLike, messages: ChatM
   const cands = await candidatesFor(db, agent);
   if (cands.length === 0) throw new NoModelError();
 
-  const promptTokens = estTokens(messages.map((m) => m.content).join("\n"));
+  const promptTokens = estTokens(JSON.stringify(messages)) + estTokens(JSON.stringify(opts.tools ?? []));
   const spentDaily = await spentTodayUsd(db, agent.id);
   const spentMission = opts.ctx?.missionId && opts.missionMaxUsd !== undefined ? await spentOnMissionUsd(db, opts.ctx.missionId) : 0;
   const perCall = opts.perCallMaxUsd ?? agent.max_cost_usd_per_run;
@@ -110,7 +116,7 @@ export async function callModel(deps: LlmDeps, agent: AgentLike, messages: ChatM
     let res: Awaited<ReturnType<ModelProvider["complete"]>>;
     try {
       const target = await providerTarget(deps, c.providerId);
-      res = await adapters[target.kind].complete(target, { model: c.modelName, messages, maxTokens: opts.maxTokens, signal: opts.signal });
+      res = await adapters[target.kind].complete(target, { model: c.modelName, messages, tools: opts.tools, maxTokens: opts.maxTokens, signal: opts.signal });
     } catch (e) {
       if (opts.signal?.aborted) throw e;
       const msg = (e as Error).message;
@@ -129,7 +135,7 @@ export async function callModel(deps: LlmDeps, agent: AgentLike, messages: ChatM
       "UPDATE models SET avg_latency_ms = CASE WHEN avg_latency_ms IS NULL THEN $2::int ELSE (avg_latency_ms*0.8 + $2::int*0.2)::int END WHERE id=$1",
       [c.modelId, latencyMs],
     );
-    return { text: res.text, tokensIn: res.tokensIn, tokensOut: res.tokensOut, costUsd: cost, latencyMs, finishReason: res.finishReason, modelId: c.modelId, modelName: c.modelName, providerName: c.providerName };
+    return { text: res.text, toolCalls: res.toolCalls ?? [], tokensIn: res.tokensIn, tokensOut: res.tokensOut, costUsd: cost, latencyMs, finishReason: res.finishReason, modelId: c.modelId, modelName: c.modelName, providerName: c.providerName };
   }
   // every candidate was too expensive; report the most consequential limit that tripped (mission > daily > per-call)
   if (budgetSkips === cands.length) throw new BudgetExceededError(tripped.has("mission") ? "mission" : tripped.has("daily") ? "daily" : "call");

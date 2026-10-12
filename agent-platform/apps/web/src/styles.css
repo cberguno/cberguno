@@ -66,3 +66,25 @@ tr.sel td { background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .lane { stroke: var(--line); stroke-dasharray: 3 4; } .msg line { stroke: var(--accent); stroke-width: 1.5; } .arrowhead { fill: var(--accent); }
 .msg.t-question line, .msg.t-escalation line { stroke: var(--warn); } .msg.t-review line { stroke: var(--ok); }
 h3 { font-size: 13px; margin: 12px 0 6px; }
+nav a { display: flex; justify-content: space-between; align-items: center; }
+.count { background: var(--danger); color: #fff; border-radius: 99px; font-size: 11px; padding: 1px 7px; font-weight: 700; }
+.badge.awaiting_approval, .badge.pending, .badge.in_review, .badge.blocked { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
+.badge.approved, .badge.ok { background: color-mix(in srgb, var(--ok) 20%, transparent); color: var(--ok); }
+.badge.rejected, .badge.denied, .badge.error, .badge.escalated { background: color-mix(in srgb, var(--danger) 20%, transparent); color: var(--danger); }
+.badge.expired, .badge.rate_limited, .badge.pending_approval { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
+.approval { border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+.approval .output { max-height: 220px; overflow: auto; }
+.wfwrap { display: grid; grid-template-columns: 1fr 260px; gap: 12px; margin-top: 12px; align-items: start; }
+.canvaswrap { overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); max-height: 560px; }
+.canvas { display: block; touch-action: none; background-image: radial-gradient(var(--line) 1px, transparent 1px); background-size: 22px 22px; }
+.wnode { cursor: grab; } .wnode rect { fill: var(--surface); stroke: var(--line); stroke-width: 1.5; } .wnode.sel rect { stroke: var(--accent); stroke-width: 2.5; }
+.wnode .n1 { fill: var(--text); font-size: 13px; font-weight: 600; pointer-events: none; } .wnode .n2 { fill: var(--muted); font-size: 11px; pointer-events: none; }
+.port { fill: var(--surface); stroke: var(--accent); stroke-width: 2; } .port.out { cursor: crosshair; } .port.out:hover { fill: var(--accent); }
+.wedge .edge { stroke: var(--accent); stroke-width: 2; fill: none; } .wedge .hit { stroke: transparent; stroke-width: 14; fill: none; cursor: pointer; } .wedge:hover .edge { stroke: var(--danger); }
+.wpanel { border: 1px solid var(--line); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; background: var(--surface); }
+@media (max-width: 900px) { .wfwrap { grid-template-columns: 1fr; } }
+.toolpicker { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 4px 12px; margin-top: 6px; max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.toolpicker label.check { flex-direction: row; gap: 6px; align-items: baseline; color: var(--text); }
+table.inner { margin: 6px 0 10px; font-size: 12px; } table.inner th, table.inner td { padding: 4px 8px; }
+.tnode.st-awaiting_approval rect { stroke: var(--warn); stroke-dasharray: 5 3; }
+.row.wrap > input, .row.wrap > select { width: auto; flex: 1 1 220px; max-width: 320px; }

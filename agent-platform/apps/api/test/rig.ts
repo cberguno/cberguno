@@ -2,8 +2,9 @@ import http from "node:http";
 import { appWithAdmin, freshDb } from "./helpers.js";
 import { Worker, type WorkerOpts } from "../src/worker.js";
 
-export type Ctx = { agent: string; system: string; user: string; n: number };
-export type Reply = string | { status: number; body?: unknown; delayMs?: number } | Promise<string | { status: number; body?: unknown; delayMs?: number }>;
+export type Ctx = { agent: string; system: string; user: string; n: number; messages: any[]; toolNames: string[] };
+export type ToolReply = { toolCalls: { name: string; args: object; id?: string }[]; content?: string };
+export type Reply = string | ToolReply | { status: number; body?: unknown; delayMs?: number } | Promise<string | { status: number; body?: unknown; delayMs?: number }>;
 export type Script = (c: Ctx) => Reply;
 
 export const DIM = 256;
@@ -43,13 +44,15 @@ export async function vendor(script: Script) {
       const k = `${agent}|${user.slice(0, 200)}`;
       const n = (counts.get(k) ?? 0) + 1;
       counts.set(k, n);
-      const ctx = { agent, system, user, n };
+      const ctx: Ctx = { agent, system, user, n, messages: body.messages, toolNames: (body.tools ?? []).map((t: any) => t.function?.name) };
       calls.push(ctx);
       active++; maxActive = Math.max(maxActive, active);
       try {
         const r = await script(ctx);
-        const out = typeof r === "string" ? { status: 200, body: { choices: [{ message: { content: r }, finish_reason: "stop" }], usage: { prompt_tokens: 100, completion_tokens: 50 } } } : { status: r.status, body: r.body ?? { error: "scripted" }, delayMs: r.delayMs };
-        const delay = typeof r === "object" && "delayMs" in r ? r.delayMs ?? 0 : 0;
+        const isTool = typeof r === "object" && "toolCalls" in r;
+        const out = isTool ? { status: 200, body: { choices: [{ message: { content: r.content ?? null, tool_calls: r.toolCalls.map((c, i) => ({ id: c.id ?? `call_${n}_${i}`, type: "function", function: { name: c.name, arguments: JSON.stringify(c.args) } })) }, finish_reason: "tool_calls" }], usage: { prompt_tokens: 100, completion_tokens: 50 } } }
+          : typeof r === "string" ? { status: 200, body: { choices: [{ message: { content: r }, finish_reason: "stop" }], usage: { prompt_tokens: 100, completion_tokens: 50 } } } : { status: (r as any).status, body: (r as any).body ?? { error: "scripted" }, delayMs: (r as any).delayMs };
+        const delay = typeof r === "object" && "delayMs" in r ? (r as any).delayMs ?? 0 : 0;
         if (delay) await new Promise((x) => setTimeout(x, delay));
         if (!res.destroyed) { res.writeHead(out.status, { "content-type": "application/json" }); res.end(JSON.stringify(out.body)); }
       } finally { active--; }
@@ -65,6 +68,26 @@ export async function vendor(script: Script) {
 }
 
 export const plan = (tasks: object[]) => JSON.stringify({ tasks });
+
+export type Seen = { method: string; url: string; headers: http.IncomingHttpHeaders; body: any };
+/** A plain HTTP server standing in for a travel API (flights search, booking...). Records every request. */
+export async function apiServer(handler: (r: Seen) => { status?: number; body: unknown; headers?: Record<string, string> } | Promise<{ status?: number; body: unknown; headers?: Record<string, string> }>) {
+  const seen: Seen[] = [];
+  const server = http.createServer((req, res) => {
+    let data = "";
+    req.on("data", (c) => (data += c));
+    req.on("end", async () => {
+      const r: Seen = { method: req.method ?? "", url: req.url ?? "", headers: req.headers, body: data ? (() => { try { return JSON.parse(data); } catch { return data; } })() : null };
+      seen.push(r);
+      const out = await handler(r);
+      res.writeHead(out.status ?? 200, { "content-type": typeof out.body === "string" ? "text/plain" : "application/json", ...(out.headers ?? {}) });
+      res.end(typeof out.body === "string" ? out.body : JSON.stringify(out.body));
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const port = (server.address() as { port: number }).port;
+  return { url: `http://127.0.0.1:${port}`, seen, close: () => new Promise<void>((r) => { server.closeAllConnections(); server.close(() => r()); }) };
+}
 
 export async function rig(script: Script, workerOpts: WorkerOpts = {}, opts: { embeddings?: boolean; reviewTeam?: boolean } = {}) {
   const fx = await freshDb();
@@ -87,7 +110,7 @@ export async function rig(script: Script, workerOpts: WorkerOpts = {}, opts: { e
   const team = (await admin.post("/api/teams", { name: "Travel" })).json().id as string;
   const members = [ids.director, ids.flights, ids.hotels, ...(opts.reviewTeam === false ? [] : [ids.qa])].map((agent_id) => ({ agent_id, reports_to: agent_id === ids.director ? null : ids.director }));
   await admin.put(`/api/teams/${team}/members`, { members });
-  const deps = { db: fx.db, masterKey: t.cfg.PLATFORM_MASTER_KEY };
+  const deps = { db: fx.db, masterKey: t.cfg.PLATFORM_MASTER_KEY, allowPrivateHosts: true };
   const worker = new Worker(deps, { pollMs: 15, leaseMs: 3000, backoffBaseMs: 20, reapMs: 100, ...workerOpts });
   const create = async (body: object) => {
     const r = await admin.post("/api/missions", { title: "Trip", goal: "Plan a trip to Lisbon", team_id: team, ...body });

@@ -25,3 +25,6 @@ export function Card({ title, actions, children }: { title?: ReactNode; actions?
 export const usd = (n: number | string | null | undefined) => `$${Number(n ?? 0).toFixed(Number(n ?? 0) < 1 ? 4 : 2)}`;
 export const when = (s?: string | null) => (s ? new Date(s).toLocaleString() : "—");
 export const Badge = ({ s }: { s: string }) => <span className={`badge ${s}`}>{s.replace("_", " ")}</span>;
+
+/** Risk of a tool: read-only (green), write (amber), irreversible (red). Shows the risk, not a status word. */
+export const RiskBadge = ({ risk }: { risk: string }) => <span className={`badge ${risk === "read" ? "active" : risk === "write" ? "paused" : "failed"}`}>{risk}</span>;

@@ -16,7 +16,7 @@ await app.listen({ port: cfg.PORT, host: cfg.HOST });
 
 // Embedded worker: missions run in this process by default. Set WORKER_EMBEDDED=false and run worker-main.ts separately to scale out.
 const worker = cfg.WORKER_EMBEDDED
-  ? new Worker({ db, masterKey: cfg.PLATFORM_MASTER_KEY }, { concurrency: cfg.WORKER_CONCURRENCY, leaseMs: cfg.WORKER_LEASE_MS, pollMs: cfg.WORKER_POLL_MS })
+  ? new Worker({ db, masterKey: cfg.PLATFORM_MASTER_KEY, allowPrivateHosts: cfg.TOOL_ALLOW_PRIVATE_HOSTS }, { concurrency: cfg.WORKER_CONCURRENCY, leaseMs: cfg.WORKER_LEASE_MS, pollMs: cfg.WORKER_POLL_MS })
   : null;
 worker?.start();
 

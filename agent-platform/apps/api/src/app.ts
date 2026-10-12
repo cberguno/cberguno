@@ -13,6 +13,9 @@ import { coreRoutes } from "./routes/core.js";
 import { memoryRoutes } from "./routes/memory.js";
 import { missionRoutes } from "./routes/missions.js";
 import { runRoutes } from "./routes/runs.js";
+import { scheduleRoutes } from "./routes/schedules.js";
+import { toolRoutes } from "./routes/tools.js";
+import { ensureBuiltinTools } from "./tools/registry.js";
 import { pgToHttp } from "./routes/util.js";
 import { RunController, type RuntimeDeps } from "./runtime.js";
 import type { ModelProvider, ProviderKind } from "./providers/index.js";
@@ -41,7 +44,10 @@ export async function buildApp(db: Db, cfg: Config, opts: { adapters?: Record<Pr
   agentRoutes(app, db, cfg, ctl);
   runRoutes(app, db, cfg, deps, ctl, bus);
   missionRoutes(app, db, cfg);
-  memoryRoutes(app, db, cfg, { db, masterKey: cfg.PLATFORM_MASTER_KEY, adapters: opts.adapters });
+  const llm = { db, masterKey: cfg.PLATFORM_MASTER_KEY, adapters: opts.adapters, allowPrivateHosts: cfg.TOOL_ALLOW_PRIVATE_HOSTS };
+  memoryRoutes(app, db, cfg, llm);
+  toolRoutes(app, db, cfg, llm);
+  scheduleRoutes(app, db, cfg);
 
   // Serve the built dashboard (SPA fallback) when present.
   const webDist = cfg.WEB_DIST;
@@ -52,6 +58,7 @@ export async function buildApp(db: Db, cfg: Config, opts: { adapters?: Record<Pr
     );
   }
 
+  await ensureBuiltinTools(db);
   await bootstrapAdmin(db, cfg);
   return app;
 }

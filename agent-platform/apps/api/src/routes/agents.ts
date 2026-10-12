@@ -31,7 +31,7 @@ const behaviour = z.object({
 /** Privilege-bearing fields: admin only. These bound what an agent can do or spend. */
 const privileged = z.object({
   permissions: z
-    .object({ tools: z.array(z.string()), memory_scope: z.enum(["agent", "team", "org"]) })
+    .object({ tools: z.array(z.string().regex(/^[a-z][a-z0-9_]*\*?$/, "tool grants are exact names or a prefix ending in *")).max(200), memory_scope: z.enum(["agent", "team", "org"]) })
     .strict(),
   max_cost_usd_per_run: z.number().min(0).max(1000),
   daily_budget_usd: z.number().min(0).max(100000),

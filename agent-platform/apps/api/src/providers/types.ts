@@ -1,8 +1,17 @@
-export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+/** JSON-schema description of a callable tool, as offered to the model. */
+export type ToolSpec = { name: string; description: string; parameters: Record<string, unknown> };
+/** `providerData` carries vendor-specific state that must be echoed back verbatim (e.g. Gemini thought signatures). */
+export type ToolCall = { id: string; name: string; arguments: Record<string, unknown>; providerData?: unknown };
+
+export type ChatMessage =
+  | { role: "system" | "user"; content: string }
+  | { role: "assistant"; content: string; toolCalls?: ToolCall[] }
+  | { role: "tool"; toolCallId: string; name: string; content: string; isError?: boolean };
 
 export type CompleteRequest = {
   model: string;
   messages: ChatMessage[];
+  tools?: ToolSpec[];
   maxTokens: number;
   temperature?: number;
   signal?: AbortSignal;
@@ -10,6 +19,7 @@ export type CompleteRequest = {
 
 export type CompleteResult = {
   text: string;
+  toolCalls: ToolCall[];
   tokensIn: number;
   tokensOut: number;
   finishReason: string;
@@ -64,5 +74,17 @@ export async function postJson(
     return JSON.parse(text);
   } catch {
     throw new ProviderError("provider returned non-JSON body", res.status, false);
+  }
+}
+
+/** Providers return tool arguments as JSON text; a malformed string must reach the gateway as a validation error, not crash the run. */
+export function parseArgs(raw: unknown): Record<string, unknown> {
+  if (raw && typeof raw === "object") return raw as Record<string, unknown>;
+  if (typeof raw !== "string" || raw.trim() === "") return {};
+  try {
+    const v = JSON.parse(raw);
+    return v && typeof v === "object" && !Array.isArray(v) ? v : { __invalid_arguments: raw.slice(0, 500) };
+  } catch {
+    return { __invalid_arguments: raw.slice(0, 500) };
   }
 }

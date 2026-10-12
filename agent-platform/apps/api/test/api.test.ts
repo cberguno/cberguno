@@ -43,7 +43,7 @@ describe("agent actors can never gain privilege", () => {
     expect((await a.get("/api/auth/me")).json()).toMatchObject({ kind: "agent", role: "agent" });
     for (const [m, u, p] of [
       ["post", "/api/agents", { name: "evil", role: "r", daily_budget_usd: 99999 }],
-      ["patch", "/api/agents/00000000-0000-0000-0000-000000000001", { permissions: { tools: ["*"], memory_scope: "org" } }],
+      ["patch", "/api/agents/00000000-0000-0000-0000-000000000001", { permissions: { tools: ["web_fetch"], memory_scope: "org" } }],
       ["post", "/api/providers", { name: "p", kind: "openai_compat", base_url: "http://x" }],
       ["post", "/api/users", { email: "e@example.com", password: "long-enough-pw-1", role: "admin" }],
     ] as const) {
@@ -83,11 +83,13 @@ describe("agent builder", () => {
 
     const denied = await operator.patch(`/api/agents/${a.id}`, { daily_budget_usd: 9999 });
     expect(denied.statusCode).toBe(403);
-    expect((await operator.post("/api/agents", { name: "Sneaky", role: "r", permissions: { tools: ["*"], memory_scope: "org" } })).statusCode).toBe(403);
+    expect((await operator.post("/api/agents", { name: "Sneaky", role: "r", permissions: { tools: ["web_fetch"], memory_scope: "org" } })).statusCode).toBe(403);
+    // a blanket "grant everything" wildcard is not a valid grant, even for an admin
+    expect((await admin.post("/api/agents", { name: "Wild", role: "r", permissions: { tools: ["*"], memory_scope: "agent" } })).statusCode).toBe(400);
 
     const ok = await operator.patch(`/api/agents/${a.id}`, { instructions: "new" });
     expect(ok.json()).toMatchObject({ version: 2, instructions: "new" });
-    const priv = await admin.patch(`/api/agents/${a.id}`, { daily_budget_usd: 20, permissions: { tools: ["web.search"], memory_scope: "team" } });
+    const priv = await admin.patch(`/api/agents/${a.id}`, { daily_budget_usd: 20, permissions: { tools: ["web_fetch"], memory_scope: "team" } });
     expect(priv.json()).toMatchObject({ version: 3, daily_budget_usd: 20 });
 
     const detail = (await admin.get(`/api/agents/${a.id}`)).json();

@@ -1,6 +1,6 @@
 # Agent Platform — Architecture
 
-Status: Phases 1–2 implemented. Phases 3–5 are designed here and **not yet built**; see [PHASES.md](PHASES.md).
+Status: Phases 1–3 implemented. Phases 4–5 are designed here and **not yet built**; see [PHASES.md](PHASES.md).
 
 ## 0. Repository inspection (done before any code)
 
@@ -87,7 +87,7 @@ Phase 1 tables are real migrations in `apps/api/migrations/`. Later phases (desi
 |---|---|
 | **1 (built)** | `users`, `credentials`, `providers`, `models`, `agents`, `agent_versions`, `teams`, `team_members`, `runs`, `run_events`, `usage_events`, `audit_log` |
 | **2 (built)** | `missions`, `tasks` (lease, attempt, depends_on, revision), `messages`, `memories` (`embedding vector`, `kind: episodic/semantic/lesson`, `scope: agent/team/org`, `salience`, `access_count`, `consolidated_into`), `settings`; `models.kind`; `usage_events.task_id/mission_id`. Channels are a column on `messages`; `artifacts` deferred. |
-| 3 | `tools`, `tool_grants`, `mcp_servers`, `tool_calls`, `approval_requests`, `schedules`, `monitors` |
+| **3 (built)** | `tools` (risk, approval policy, limits, provenance kind; CHECK: irreversible ⇒ approval required), `mcp_servers`, `tool_calls`, `approval_requests`, `workflows`, `schedules`; `tasks.transcript`, `tasks.status='awaiting_approval'`, `missions.schedule_id/scheduled_for`. Grants live in `agents.permissions.tools` (admin-only); there is no separate grants table. Monitors are scheduled missions. |
 | 4 | `customers`, `trips`, `quotes` (with provenance), `bookings` (draft/authorised/confirmed) |
 | 5 | `eval_suites`, `eval_cases`, `eval_runs`, `experiments` (config A/B, promote gate), `backups` metadata |
 
@@ -130,3 +130,21 @@ Phase 1 tables are real migrations in `apps/api/migrations/`. Later phases (desi
 **Memory.** Rows carry `kind`, `scope` and an optional embedding plus the model that produced it; search compares only rows from the current embedding model and matching dimension, and unembedded rows are found by Postgres full-text search, so changing or losing the embedder never breaks recall. Access is enforced in SQL from the agent's admin-set `memory_scope`. Retrieved memories enter prompts inside a delimited block labelled as reference data (a prompt-injection mitigation, not a guarantee). Untyped `vector` columns trade ANN indexing for flexibility; add an HNSW index per fixed dimension once an embedding model is chosen and the corpus is large.
 
 **Known limits.** Dashboard mission view polls (2 s). Direct-run SSE is in-process. Embedding calls are metered by tokens only when the vendor reports them. Memory quality with real embedding models and the benefit of lessons on outcomes are unmeasured until Phase 5.
+
+## 10. Phase 3 as built (tools, approvals, scheduling)
+
+**Tool-use loop.** For a `work` task whose agent has at least one granted tool, `runToolLoop` alternates model call → gateway → tool result until the model answers (default 8 steps, then a final tool-less call forces an answer). Each model turn goes through the same `callModel` (routing, budgets, usage) as everything else, so tool-using work is metered per task and per mission.
+
+**Gateway order (`tools/gateway.ts`).** known and enabled → agent currently granted (read fresh) → arguments valid against the tool's JSON Schema (Ajv) → per-tool rate limit → approval → execute → record. A refusal at any step becomes a result string for the model plus a `tool_calls` row. Nothing in the loop trusts the model's description of what it is doing; authorisation is data the model cannot edit.
+
+**Approvals are a state machine, not a prompt.** `pending → approved | rejected | expired`; `executed_at` is set by an atomic `UPDATE … WHERE executed_at IS NULL` immediately before execution, making each approval single-use. When a call needs approval the loop persists `{messages, pending[]}` on the task, sets `awaiting_approval`, releases the lease and returns; the decision endpoint requeues the task once every pending approval of that task is decided. On resume, approved calls execute the *stored* arguments, rejected/expired ones are reported to the model as such. Lock order stays mission → task → approval.
+
+**Why at-most-once.** If a worker dies after `executed_at` is set but before a result is recorded, the resume reports "outcome unknown, not retried" to the model rather than risk a second booking. Combined with the per-task idempotency check (same tool + same argument hash already executed ⇒ return the earlier result, ask nobody again) a model that repeats itself or a retried task cannot double-execute an approved action.
+
+**MCP.** `withMcp` connects per call (streamable HTTP, SSE fallback) using the official SDK; the server's credential is decrypted only there. `syncMcpServer` mirrors `tools/list` into `tools` as `<server>__<tool>` with risk derived from annotations (`readOnlyHint` ⇒ read/never, otherwise write/required) and applies the re-sync quarantine described in PHASES.md. Admin-chosen risk, approval, limits and enabled state are never overwritten by a sync.
+
+**Scheduling.** `fireDueSchedules` runs in every worker's housekeeping tick. Rows are claimed `FOR NO KEY UPDATE SKIP LOCKED` (plain `FOR UPDATE` would deadlock against the foreign-key check of the mission it creates), and `UNIQUE (schedule_id, scheduled_for)` makes a double fire harmless. After downtime exactly one catch-up mission starts and the schedule resumes from now.
+
+**Provenance.** Every successful tool call records `{source, kind: live|cached|estimate, retrieved_at}` (kind is a property of the tool definition) and the result wrapper hands it to the model, which is instructed to label prices and availability accordingly. Enforcing this on customer-facing output is a Phase 4 QA responsibility; Phase 3 only guarantees the data is there.
+
+**Not covered.** Prompt-injection resistance rests on structure (grants, schema validation, approvals), not on the model's obedience; a compromised model can still waste granted read-only calls or produce misleading text, which QA review and Phase 5 evaluation must catch.

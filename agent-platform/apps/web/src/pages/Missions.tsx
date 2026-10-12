@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { get, post } from "../api";
 import { canEdit, useAuth } from "../auth";
 import { Badge, Card, Err, useLoad, usd, when } from "../ui";
@@ -96,7 +97,8 @@ export default function Missions() {
   const edit = canEdit(me?.role);
   const list = useLoad(() => get<any[]>("/api/missions"));
   const teams = useLoad(() => get<any[]>("/api/teams"));
-  const [sel, setSel] = useState<string>("");
+  const [params] = useSearchParams();
+  const [sel, setSel] = useState<string>(params.get("mission") ?? "");
   const detail = useLoad(() => (sel ? get<any>(`/api/missions/${sel}`) : Promise.resolve(null)), [sel]);
   const [form, setForm] = useState({ title: "", goal: "", team_id: "", review: false, max_cost_usd: 2 });
   const [err, setErr] = useState<string | null>(null);
@@ -141,7 +143,7 @@ export default function Missions() {
             {list.data?.map((x) => (
               <tr key={x.id} className={x.id === sel ? "sel" : ""} onClick={() => setSel(x.id)} style={{ cursor: "pointer" }}>
                 <td><b>{x.title}</b>{x.escalation_reason && <div className="small error-text">{x.escalation_reason}</div>}</td><td>{x.team_name}</td><td><Badge s={x.status} /></td>
-                <td>{x.tasks_done}/{x.tasks_total}</td><td>{usd(x.cost_usd)} / {usd(x.max_cost_usd)}</td><td>{when(x.created_at)}</td>
+                <td>{x.tasks_done}/{x.tasks_total}{x.pending_approvals > 0 && <> <Link to="/approvals" className="count" title="Waiting for your approval">{x.pending_approvals} to approve</Link></>}</td><td>{usd(x.cost_usd)} / {usd(x.max_cost_usd)}</td><td>{when(x.created_at)}</td>
               </tr>
             ))}
             {list.data?.length === 0 && <tr><td colSpan={6} className="muted">No missions yet.</td></tr>}
@@ -156,6 +158,7 @@ export default function Missions() {
             {edit && ["running", "needs_human"].includes(m.status) && <button className="danger" onClick={() => confirm("Cancel this mission?") && act("cancel")}>Cancel</button>}</>}>
             <p className="muted small">Orchestrator: {m.orchestrator_name} · Team: {m.team_name} · Spent {usd(m.cost_usd)} of {usd(m.max_cost_usd)}</p>
             <p>{m.goal}</p>
+            {m.approvals?.some((a: any) => a.status === "pending") && <div className="notice" role="alert"><b>Waiting for approval:</b> {m.approvals.filter((a: any) => a.status === "pending").map((a: any) => a.tool_name).join(", ")} — <Link to="/approvals">review now</Link></div>}
             {m.escalation_reason && <div className="error" role="alert"><b>Needs a human:</b> {m.escalation_reason}</div>}
             {m.error && m.status !== "needs_human" && <div className="error">{m.error}</div>}
             {m.output && <><h3>Result</h3><pre className="output">{m.output}</pre></>}
@@ -170,7 +173,12 @@ export default function Missions() {
                   <>
                     <tr key={t.id}><td>{t.title}<div className="muted small mono">{t.key} · {t.kind}</div></td><td>{t.assignee_name}</td><td><Badge s={t.status} /></td><td>{t.attempt}{t.revision ? ` (rev ${t.revision})` : ""}</td><td>{usd(t.cost_usd)}</td>
                       <td><button onClick={() => setOpen(open === t.id ? null : t.id)}>{open === t.id ? "Hide" : "Output"}</button></td></tr>
-                    {open === t.id && <tr key={t.id + "o"}><td colSpan={6}>{t.error && <div className="error">{t.error}</div>}<pre className="output">{t.output ?? "(no output yet)"}</pre></td></tr>}
+                    {open === t.id && <tr key={t.id + "o"}><td colSpan={6}>{t.error && <div className="error">{t.error}</div>}
+                      {m.tool_calls.filter((c: any) => c.task_id === t.id).length > 0 && (
+                        <table className="inner"><thead><tr><th>Tool call</th><th>Status</th><th>Arguments</th><th>Provenance</th><th>Result</th></tr></thead><tbody>
+                          {m.tool_calls.filter((c: any) => c.task_id === t.id).map((c: any) => <tr key={c.id}><td className="mono">{c.tool_name}</td><td><Badge s={c.status} /></td><td className="mono small">{JSON.stringify(c.args)}</td><td className="small">{c.provenance ? `${c.provenance.kind} · ${new Date(c.provenance.retrieved_at).toLocaleTimeString()}` : "—"}</td><td className="small">{(c.result_preview ?? c.error ?? "").slice(0, 160)}</td></tr>)}
+                        </tbody></table>)}
+                      <pre className="output">{t.output ?? "(no output yet)"}</pre></td></tr>}
                   </>
                 ))}
               </tbody>

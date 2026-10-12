@@ -41,6 +41,16 @@ Run nightly from cron, copy off-box, and **test a restore** before relying on it
 
 **pgvector is required from Phase 2** (migration `002` runs `CREATE EXTENSION vector` and fails clearly without it). Railway's stock Postgres plugin does not include it: use Railway's pgvector template, or any Postgres that offers it (the compose file's `pgvector/pgvector:pg16` image does).
 
+## Tools, MCP and the network
+
+* **Default is safe:** tools and MCP servers may only reach the **public internet** (private, loopback and cloud-metadata addresses are refused). Set `TOOL_ALLOW_PRIVATE_HOSTS=true` only if you deliberately attach internal APIs.
+* **Egress filtering is the real boundary for MCP and the browser.** Their libraries resolve DNS themselves after our check, so on production hosts also block outbound traffic to private ranges and `169.254.169.254` at the firewall/VPC level, and run browser-capable workers on a host with no route to anything internal.
+* **Secrets:** tool and MCP credentials are stored encrypted (same vault and `PLATFORM_MASTER_KEY` as provider keys), shown once, and never placed in prompts.
+* **MCP servers you attach are third-party code.** The platform treats anything not declared read-only as needing approval and quarantines changed tools on re-sync, but you decide which servers to trust and which tools to grant.
+* **Browser tool:** `docker build --build-arg BROWSER=chromium .` (or `docker compose --profile browser up -d --build worker-browser`). Without it `browser_read` explains that no browser is configured; `web_fetch` still works. Interactive automation is not provided.
+* **Approvals** wait up to 3 days, then expire (counted as a rejection). Someone needs to watch the Approvals page (the nav shows a badge); there is no email/push notification yet.
+* **Schedules** fire from every worker; keep at least one worker running or nothing is started.
+
 ## Scaling and durability
 
 * **Missions are durable.** Their state is in Postgres; restart or kill the API/workers at any time. A task whose worker died is retried when its lease (`WORKER_LEASE_MS`, default 60 s) expires. Choose a lease longer than your slowest single model call.
