@@ -3,8 +3,8 @@ import type { Db } from "./db.js";
 import { postMessage } from "./messages.js";
 import { type Q } from "./queue.js";
 
-export type MissionOptions = { review: boolean; max_tasks: number; max_depth: number; max_fanout: number; max_messages: number; max_revisions: number };
-export const DEFAULT_OPTIONS: MissionOptions = { review: false, max_tasks: 12, max_depth: 2, max_fanout: 6, max_messages: 80, max_revisions: 1 };
+export type MissionOptions = { review: boolean; max_tasks: number; max_depth: number; max_fanout: number; max_messages: number; max_revisions: number; max_tool_steps: number };
+export const DEFAULT_OPTIONS: MissionOptions = { review: false, max_tasks: 12, max_depth: 2, max_fanout: 6, max_messages: 80, max_revisions: 1, max_tool_steps: 8 };
 
 export type RosterAgent = { id: string; name: string; role: string; kind: string; status: string };
 
@@ -123,11 +123,17 @@ export type NewMission = {
   options?: Partial<MissionOptions>; maxCostUsd?: number;
   /** A human-authored task graph. When present the orchestrator's planning call is skipped. */
   plan?: unknown; createdBy?: string | null;
+  scheduleId?: string; scheduledFor?: Date;
 };
 
 export class MissionConfigError extends Error {}
 
-export async function createMission(db: Db, m: NewMission): Promise<string> {
+/** Everything createMission checks, without writing: used to vet schedule/workflow templates up front. */
+export async function validateMissionTemplate(db: Db, m: Pick<NewMission, "teamId" | "orchestratorId" | "options" | "plan">): Promise<void> {
+  await prepare(db, m as NewMission);
+}
+
+async function prepare(db: Db, m: NewMission) {
   const roster = await rosterFor(db, m.teamId);
   if (roster.length === 0) throw new MissionConfigError("team has no members");
   const orch = m.orchestratorId
@@ -138,13 +144,17 @@ export async function createMission(db: Db, m: NewMission): Promise<string> {
   const options: MissionOptions = { ...DEFAULT_OPTIONS, ...m.options };
   if (options.review && !roster.some((a) => a.kind === "qa" && a.status === "active")) throw new MissionConfigError("review requires an active QA agent on the team");
   const specs = m.plan !== undefined ? validatePlan(m.plan, roster, { maxTasks: options.max_tasks - 1, existing: 0 }) : null;
+  return { orch, options, specs };
+}
 
+export async function createMission(db: Db, m: NewMission): Promise<string> {
+  const { orch, options, specs } = await prepare(db, m);
   const client = await db.connect();
   try {
     await client.query("BEGIN");
     const { rows } = await client.query(
-      `INSERT INTO missions(title, goal, team_id, orchestrator_id, options, max_cost_usd, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-      [m.title, m.goal, m.teamId, orch.id, JSON.stringify(options), m.maxCostUsd ?? 2, m.createdBy ?? null],
+      `INSERT INTO missions(title, goal, team_id, orchestrator_id, options, max_cost_usd, created_by, schedule_id, scheduled_for) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+      [m.title, m.goal, m.teamId, orch.id, JSON.stringify(options), m.maxCostUsd ?? 2, m.createdBy ?? null, m.scheduleId ?? null, m.scheduledFor ?? null],
     );
     const mission = { id: rows[0].id as string, orchestrator_id: orch.id };
     if (specs) {
@@ -171,7 +181,10 @@ export async function cancelMission(db: Db, missionId: string): Promise<boolean>
   try {
     await client.query("BEGIN");
     const r = await client.query(`UPDATE missions SET status='cancelled', finished_at=now() WHERE id=$1 AND status IN ('running','needs_human') RETURNING id`, [missionId]);
-    if (r.rowCount) await client.query(`UPDATE tasks SET status='cancelled', finished_at=now(), locked_by=NULL WHERE mission_id=$1 AND status IN ('waiting','queued','running','blocked','in_review','failed','escalated')`, [missionId]);
+    if (r.rowCount) {
+      await client.query(`UPDATE tasks SET status='cancelled', finished_at=now(), locked_by=NULL WHERE mission_id=$1 AND status IN ('waiting','queued','running','blocked','in_review','awaiting_approval','failed','escalated')`, [missionId]);
+      await client.query(`UPDATE approval_requests SET status='expired', decided_at=now(), decision_note='mission cancelled' WHERE mission_id=$1 AND status='pending'`, [missionId]);
+    }
     await client.query("COMMIT");
     return (r.rowCount ?? 0) > 0;
   } catch (e) {

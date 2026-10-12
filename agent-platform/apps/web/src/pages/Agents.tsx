@@ -4,10 +4,28 @@ import { get, patch, post } from "../api";
 import { canEdit, isAdmin, useAuth } from "../auth";
 import { Badge, Card, Err, useLoad, usd } from "../ui";
 
+function ToolPicker({ value, onChange, tools, disabled }: { value: string[]; onChange: (v: string[]) => void; tools: any[]; disabled: boolean }) {
+  const servers = [...new Set(tools.filter((t) => t.server_name).map((t) => t.server_name as string))];
+  const opts = [
+    ...servers.map((s) => ({ v: `${s}__*`, label: `All tools from ${s}`, hint: "includes tools added later, once an admin has reviewed them" })),
+    ...tools.map((t) => ({ v: t.name as string, label: t.name as string, hint: `${t.risk}${t.approval === "required" ? " · needs approval" : ""}` })),
+  ];
+  const extra = value.filter((v) => !opts.some((o) => o.v === v)).map((v) => ({ v, label: v, hint: "not in the registry" }));
+  const toggle = (v: string) => onChange(value.includes(v) ? value.filter((x) => x !== v) : [...value, v]);
+  return (
+    <div className="toolpicker" role="group" aria-label="Allowed tools">
+      {[...opts, ...extra].map((o) => (
+        <label key={o.v} className="check"><input type="checkbox" disabled={disabled} checked={value.includes(o.v)} onChange={() => toggle(o.v)} /><span className="mono">{o.label}</span><span className="muted small"> {o.hint}</span></label>
+      ))}
+      {opts.length === 0 && <span className="muted small">No tools registered yet (Tools &amp; MCP).</span>}
+    </div>
+  );
+}
+
 const blank = {
   name: "", kind: "specialist", role: "", goal: "", instructions: "", model_id: "" as string,
   routing: { strategy: "cheapest", complexity: "medium" } as any,
-  tools: "", memory_scope: "agent", max_cost_usd_per_run: 0.5, daily_budget_usd: 5, run_timeout_ms: 120000,
+  tools: [] as string[], memory_scope: "agent", max_cost_usd_per_run: 0.5, daily_budget_usd: 5, run_timeout_ms: 120000,
 };
 
 export default function Agents() {
@@ -15,6 +33,7 @@ export default function Agents() {
   const edit = canEdit(me?.role), admin = isAdmin(me?.role);
   const agents = useLoad(() => get<any[]>("/api/agents"));
   const models = useLoad(() => get<any[]>("/api/models"));
+  const toolList = useLoad(() => get<any[]>("/api/tools"));
   const [form, setForm] = useState<typeof blank & { id?: string }>(blank);
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -22,7 +41,7 @@ export default function Agents() {
 
   const startEdit = (a?: any) => {
     setErr(null);
-    setForm(a ? { ...blank, ...a, model_id: a.model_id ?? "", tools: (a.permissions?.tools ?? []).join(", "), memory_scope: a.permissions?.memory_scope ?? "agent" } : blank);
+    setForm(a ? { ...blank, ...a, model_id: a.model_id ?? "", tools: (a.permissions?.tools ?? []) as string[], memory_scope: a.permissions?.memory_scope ?? "agent" } : blank);
     setOpen(true);
   };
 
@@ -30,7 +49,7 @@ export default function Agents() {
     e.preventDefault();
     const body: any = { name: form.name, kind: form.kind, role: form.role, goal: form.goal, instructions: form.instructions, model_id: form.model_id || null, routing: form.routing };
     if (admin) {
-      body.permissions = { tools: form.tools.split(",").map((s) => s.trim()).filter(Boolean), memory_scope: form.memory_scope };
+      body.permissions = { tools: form.tools, memory_scope: form.memory_scope };
       body.max_cost_usd_per_run = +form.max_cost_usd_per_run; body.daily_budget_usd = +form.daily_budget_usd; body.run_timeout_ms = +form.run_timeout_ms;
     }
     try { form.id ? await patch(`/api/agents/${form.id}`, body) : await post("/api/agents", body); setOpen(false); await agents.reload(); } catch (x) { setErr((x as Error).message); }
@@ -95,7 +114,8 @@ export default function Agents() {
             <fieldset className="full" disabled={!admin}>
               <legend>Permissions and limits {admin ? "" : "(admin only)"}</legend>
               <div className="grid">
-                <label>Allowed tools (comma-separated; enforced from Phase 3)<input value={form.tools} onChange={(e) => set("tools", e.target.value)} /></label>
+                <div className="full"><span className="muted small">Allowed tools — an agent can use nothing that is not ticked. Anything that changes the outside world still needs a human to approve each use.</span>
+                  <ToolPicker value={form.tools} onChange={(v) => set("tools", v)} tools={toolList.data ?? []} disabled={!admin} /></div>
                 <label>Memory scope
                   <select value={form.memory_scope} onChange={(e) => set("memory_scope", e.target.value)}><option>agent</option><option>team</option><option>org</option></select>
                 </label>

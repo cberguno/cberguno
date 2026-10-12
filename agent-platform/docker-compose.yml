@@ -35,5 +35,19 @@ services:
     environment:
       DATABASE_URL: postgres://agent:${POSTGRES_PASSWORD}@db:5432/agent
     command: ["node", "dist/worker-main.js"]
+  # Workers that can render JavaScript pages (browser_read). Run these on a host/network with egress filtering (see docs/DEPLOYMENT.md).
+  #   docker compose --profile browser up -d --build worker-browser
+  worker-browser:
+    build:
+      context: .
+      args: { BROWSER: "chromium" }
+    profiles: ["browser"]
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://agent:${POSTGRES_PASSWORD}@db:5432/agent
+    command: ["node", "dist/worker-main.js"]
 volumes:
   pgdata:

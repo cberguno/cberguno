@@ -1,7 +1,8 @@
 import type { FastifyReply } from "fastify";
-import type { ZodSchema } from "zod";
+import type { ZodTypeAny, z } from "zod";
 
-export function parse<T>(schema: ZodSchema<T>, data: unknown, reply: FastifyReply): T | undefined {
+/** Returns the schema's OUTPUT type (so `.default()` fields are present). */
+export function parse<S extends ZodTypeAny>(schema: S, data: unknown, reply: FastifyReply): z.output<S> | undefined {
   const r = schema.safeParse(data);
   if (!r.success) {
     reply.code(400).send({ error: "validation", issues: r.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })) });

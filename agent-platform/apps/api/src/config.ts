@@ -12,6 +12,7 @@ const schema = z.object({
   WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(4),
   WORKER_LEASE_MS: z.coerce.number().int().min(1000).default(60000),
   WORKER_POLL_MS: z.coerce.number().int().min(50).default(500),
+  TOOL_ALLOW_PRIVATE_HOSTS: z.enum(["true", "false"]).default("false").transform((v) => v === "true"),
   // Bootstrap: creates the first admin if the users table is empty.
   BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional(),
   BOOTSTRAP_ADMIN_PASSWORD: z.string().min(12).optional(),

@@ -9,9 +9,10 @@ export type TaskRow = {
   title: string; input: string; assignee_id: string; assigner_id: string | null; depends_on: string[];
   status: string; attempt: number; max_attempts: number; output: string | null; error: string | null;
   structured: any; depth: number; revision: number; meta: Record<string, any>; locked_by: string | null;
+  transcript: { messages: any[]; pending: { callId: string; name: string; approvalId: string }[] } | null;
 };
 
-const OPEN = ["waiting", "queued", "running", "blocked", "in_review"];
+const OPEN = ["waiting", "queued", "running", "blocked", "in_review", "awaiting_approval"];
 
 /** Atomically take one runnable task under a lease. SKIP LOCKED makes concurrent workers safe. */
 export async function claimTask(db: Db, workerId: string, leaseMs: number): Promise<TaskRow | null> {

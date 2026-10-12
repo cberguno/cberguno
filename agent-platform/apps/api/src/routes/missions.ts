@@ -9,7 +9,7 @@ import { parse, pgToHttp } from "./util.js";
 
 const options = z.object({
   review: z.boolean(), max_tasks: z.number().int().min(2).max(50), max_depth: z.number().int().min(1).max(4),
-  max_fanout: z.number().int().min(1).max(20), max_messages: z.number().int().min(3).max(1000), max_revisions: z.number().int().min(0).max(5),
+  max_fanout: z.number().int().min(1).max(20), max_messages: z.number().int().min(3).max(1000), max_revisions: z.number().int().min(0).max(5), max_tool_steps: z.number().int().min(1).max(20),
 }).partial();
 
 export function missionRoutes(app: FastifyInstance, db: Db, cfg: Config) {
@@ -41,7 +41,8 @@ export function missionRoutes(app: FastifyInstance, db: Db, cfg: Config) {
       `SELECT m.id, m.title, m.status, m.team_id, t.name AS team_name, m.max_cost_usd, m.escalation_reason, m.created_at, m.finished_at,
               COALESCE((SELECT sum(cost_usd) FROM usage_events u WHERE u.mission_id=m.id),0) AS cost_usd,
               (SELECT count(*)::int FROM tasks k WHERE k.mission_id=m.id) AS tasks_total,
-              (SELECT count(*)::int FROM tasks k WHERE k.mission_id=m.id AND k.status='done') AS tasks_done
+              (SELECT count(*)::int FROM tasks k WHERE k.mission_id=m.id AND k.status='done') AS tasks_done,
+              (SELECT count(*)::int FROM approval_requests ar WHERE ar.mission_id=m.id AND ar.status='pending') AS pending_approvals
          FROM missions m JOIN teams t ON t.id=m.team_id ORDER BY m.created_at DESC LIMIT 100`,
     );
     return rows;
@@ -61,7 +62,11 @@ export function missionRoutes(app: FastifyInstance, db: Db, cfg: Config) {
       const messages = (await db.query(
         `SELECT ms.id, ms.type, ms.channel, ms.from_kind, ms.from_id, fa.name AS from_name, ms.to_kind, ms.to_id, ta.name AS to_name, ms.body, ms.refs, ms.created_at
            FROM messages ms LEFT JOIN agents fa ON fa.id=ms.from_id LEFT JOIN agents ta ON ta.id=ms.to_id WHERE ms.mission_id=$1 ORDER BY ms.created_at, ms.id`, [id])).rows;
-      return { ...m, tasks, messages };
+      const tool_calls = (await db.query(
+        `SELECT c.id, c.task_id, c.tool_name, c.status, c.args, c.result_preview, c.error, c.provenance, c.duration_ms, c.at FROM tool_calls c WHERE c.mission_id=$1 ORDER BY c.id`, [id])).rows;
+      const approvals = (await db.query(
+        `SELECT id, task_id, tool_name, args, risk, status, requested_at, decided_at, decision_note FROM approval_requests WHERE mission_id=$1 ORDER BY requested_at`, [id])).rows;
+      return { ...m, tasks, messages, tool_calls, approvals };
     } catch (e) {
       const h = bad(e);
       if (h) return reply.code(h.code).send({ error: h.error });
