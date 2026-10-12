@@ -55,3 +55,14 @@ button:disabled { opacity: .5; cursor: not-allowed; } :focus-visible { outline: 
   .layout { grid-template-columns: 1fr; } nav { position: static; height: auto; flex-direction: row; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--line); }
   nav h1 { width: 100%; } .spacer { display: none; } main { padding: 12px 16px; }
 }
+tr.sel td { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.error-text { color: var(--danger); }
+.orgchart .edge.dotted { stroke-dasharray: 4 4; }
+.tnode rect { fill: var(--bg); stroke: var(--line); stroke-width: 1.5; }
+.tnode.st-running rect { stroke: var(--accent); } .tnode.st-done rect { stroke: var(--ok); }
+.tnode.st-failed rect, .tnode.st-escalated rect { stroke: var(--danger); } .tnode.st-blocked rect, .tnode.st-in_review rect { stroke: var(--warn); }
+.tnode.st-cancelled rect, .tnode.st-waiting rect { opacity: .6; }
+.tnode .n1 { fill: var(--text); font-size: 12px; font-weight: 600; } .tnode .n2 { fill: var(--muted); font-size: 10px; }
+.lane { stroke: var(--line); stroke-dasharray: 3 4; } .msg line { stroke: var(--accent); stroke-width: 1.5; } .arrowhead { fill: var(--accent); }
+.msg.t-question line, .msg.t-escalation line { stroke: var(--warn); } .msg.t-review line { stroke: var(--ok); }
+h3 { font-size: 13px; margin: 12px 0 6px; }

@@ -1,6 +1,6 @@
 # Agent Platform — Architecture
 
-Status: Phase 1 implemented. Phases 2–5 are designed here and **not yet built**; see [PHASES.md](PHASES.md).
+Status: Phases 1–2 implemented. Phases 3–5 are designed here and **not yet built**; see [PHASES.md](PHASES.md).
 
 ## 0. Repository inspection (done before any code)
 
@@ -86,7 +86,7 @@ Phase 1 tables are real migrations in `apps/api/migrations/`. Later phases (desi
 | Phase | Tables |
 |---|---|
 | **1 (built)** | `users`, `credentials`, `providers`, `models`, `agents`, `agent_versions`, `teams`, `team_members`, `runs`, `run_events`, `usage_events`, `audit_log` |
-| 2 | `missions`, `tasks` (+ lease/attempt), `messages`, `channels`, `memories` (`embedding vector(N)`, `kind: working/episodic/semantic/lesson`, `scope: agent/team/org`, `salience`, `last_accessed_at`), `artifacts` |
+| **2 (built)** | `missions`, `tasks` (lease, attempt, depends_on, revision), `messages`, `memories` (`embedding vector`, `kind: episodic/semantic/lesson`, `scope: agent/team/org`, `salience`, `access_count`, `consolidated_into`), `settings`; `models.kind`; `usage_events.task_id/mission_id`. Channels are a column on `messages`; `artifacts` deferred. |
 | 3 | `tools`, `tool_grants`, `mcp_servers`, `tool_calls`, `approval_requests`, `schedules`, `monitors` |
 | 4 | `customers`, `trips`, `quotes` (with provenance), `bookings` (draft/authorised/confirmed) |
 | 5 | `eval_suites`, `eval_cases`, `eval_runs`, `experiments` (config A/B, promote gate), `backups` metadata |
@@ -116,3 +116,17 @@ Phase 1 tables are real migrations in `apps/api/migrations/`. Later phases (desi
 
 * One `Dockerfile` (multi-stage) builds API + static dashboard; `docker-compose.yml` = api + `pgvector/pgvector:pg16` + redis. Compatible with OVH VPS (compose behind Caddy/nginx) and Railway (Dockerfile service + Postgres/Redis plugins). Nothing requires AWS/Azure/GCP.
 * Horizontal scale: API is stateless (Phase 1 SSE fan-out is in-process, moves to Redis pub/sub in Phase 2 — a documented single-node limitation until then). Workers scale by count; queue claiming is lock-safe.
+
+## 9. Phase 2 as built (decisions and why)
+
+**Postgres only; no Redis.** The brief preferred Redis queues. The queue is `tasks` claimed with `UPDATE … WHERE id = (SELECT … FOR UPDATE SKIP LOCKED)`: durable by construction, transactional with the state it changes (a result, its child tasks and its messages commit together or not at all), and one fewer service to run and back up. Redis becomes worthwhile for sub-second cross-replica fan-out or very high task rates; neither applies yet, and swapping it in later touches `queue.ts`/`bus.ts` only.
+
+**Execution model.** `Worker` (embedded in the API by default, or standalone via `worker-main.ts`) loops: reap expired leases → claim → execute. A claim sets `status=running, locked_by, lease_expires_at, attempt+1`; a heartbeat extends the lease while the model call runs. If the process dies, the lease lapses and the reaper requeues the task (or escalates once `max_attempts` are used). Completion goes through `completeWith`, which re-checks ownership (`status=running AND locked_by=me`) inside the transaction, so a worker that lost its lease cannot write anything (**fencing**). Completions in one mission are serialised by locking the mission row first (fixed lock order mission → task everywhere); without that, two tasks finishing together each miss the other's uncommitted `done` and never unlock the next task.
+
+**Mission lifecycle.** `running → needs_human | succeeded | failed | cancelled | budget_exceeded`. The orchestrator's `plan` task returns JSON; the platform validates it (active team members only, acyclic, size/fan-out limits) before inserting tasks, and feeds the validation error back on retry. A `synthesize` task depends on all top-level work. Tasks: `plan | work | review | answer | synthesize`; statuses `waiting | queued | running | blocked | in_review | done | failed | escalated | cancelled`. Any condition that needs a human parks the mission in `needs_human` (queued tasks stop being claimed; in-flight ones finish) with a reason and an `escalation` message.
+
+**Agent communication.** Messages are typed, validated and stored (`messages`), written in the same transaction as the state change they describe. Agents exchange *references* (task keys) — each task prompt is assembled from its own input, only its declared dependencies' outputs (clipped), retrieved memories, and any feedback/clarifications. Agents do not converse freely; they can only assign, report, ask their manager (≤2 per task), review, and escalate. A per-mission message budget is the backstop against runaway loops.
+
+**Memory.** Rows carry `kind`, `scope` and an optional embedding plus the model that produced it; search compares only rows from the current embedding model and matching dimension, and unembedded rows are found by Postgres full-text search, so changing or losing the embedder never breaks recall. Access is enforced in SQL from the agent's admin-set `memory_scope`. Retrieved memories enter prompts inside a delimited block labelled as reference data (a prompt-injection mitigation, not a guarantee). Untyped `vector` columns trade ANN indexing for flexibility; add an HNSW index per fixed dimension once an embedding model is chosen and the corpus is large.
+
+**Known limits.** Dashboard mission view polls (2 s). Direct-run SSE is in-process. Embedding calls are metered by tokens only when the vendor reports them. Memory quality with real embedding models and the benefit of lessons on outcomes are unmeasured until Phase 5.

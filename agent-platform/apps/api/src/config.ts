@@ -8,6 +8,10 @@ const schema = z.object({
   HOST: z.string().default("0.0.0.0"),
   WEB_DIST: z.string().optional(),
   CORS_ORIGIN: z.string().optional(),
+  WORKER_EMBEDDED: z.enum(["true", "false"]).default("true").transform((v) => v === "true"),
+  WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(4),
+  WORKER_LEASE_MS: z.coerce.number().int().min(1000).default(60000),
+  WORKER_POLL_MS: z.coerce.number().int().min(50).default(500),
   // Bootstrap: creates the first admin if the users table is empty.
   BOOTSTRAP_ADMIN_EMAIL: z.string().email().optional(),
   BOOTSTRAP_ADMIN_PASSWORD: z.string().min(12).optional(),

@@ -193,6 +193,7 @@ export function coreRoutes(app: FastifyInstance, db: Db, cfg: Config) {
     model_name: z.string().min(1),
     display_name: z.string().min(1),
     tier: z.enum(["fast", "standard", "frontier"]),
+    kind: z.enum(["chat", "embedding"]).default("chat"),
     context_window: z.number().int().positive().default(8192),
     supports_tools: z.boolean().default(false),
     supports_vision: z.boolean().default(false),
@@ -205,9 +206,9 @@ export function coreRoutes(app: FastifyInstance, db: Db, cfg: Config) {
     const b = parse(modelBody, req.body, reply);
     if (!b) return;
     const { rows } = await db.query(
-      `INSERT INTO models(provider_id, model_name, display_name, tier, context_window, supports_tools, supports_vision, usd_per_mtok_in, usd_per_mtok_out, enabled)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-      [b.provider_id, b.model_name, b.display_name, b.tier, b.context_window, b.supports_tools, b.supports_vision, b.usd_per_mtok_in, b.usd_per_mtok_out, b.enabled],
+      `INSERT INTO models(provider_id, model_name, display_name, tier, kind, context_window, supports_tools, supports_vision, usd_per_mtok_in, usd_per_mtok_out, enabled)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [b.provider_id, b.model_name, b.display_name, b.tier, b.kind, b.context_window, b.supports_tools, b.supports_vision, b.usd_per_mtok_in, b.usd_per_mtok_out, b.enabled],
     );
     await audit(db, req.actor!, "model.create", { type: "model", id: rows[0].id }, b);
     return reply.code(201).send(rows[0]);

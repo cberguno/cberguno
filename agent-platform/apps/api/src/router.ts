@@ -74,7 +74,7 @@ export async function loadCandidates(db: Db): Promise<Candidate[]> {
     `SELECT m.id AS model_id, m.provider_id, p.name AS provider_name, m.model_name, m.tier, m.context_window,
             m.supports_tools, m.supports_vision, m.usd_per_mtok_in, m.usd_per_mtok_out, m.avg_latency_ms
        FROM models m JOIN providers p ON p.id = m.provider_id
-      WHERE m.enabled AND p.enabled`,
+      WHERE m.enabled AND p.enabled AND m.kind = 'chat'`,
   );
   return rows.map((r) => ({
     modelId: r.model_id,
