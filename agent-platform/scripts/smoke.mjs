@@ -15,8 +15,12 @@ await admin.query(`CREATE DATABASE ${dbName}`);
 
 const model = http.createServer((req, res) => {
   let b = ""; req.on("data", (c) => (b += c)); req.on("end", () => {
+    let user = ""; try { user = JSON.parse(b).messages?.at(-1)?.content ?? ""; } catch {}
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ choices: [{ message: { content: "Lisbon in 3 days: Alfama, Belém, Sintra." }, finish_reason: "stop" }], usage: { prompt_tokens: 120, completion_tokens: 40 } }));
+    const content = user.includes("You are the orchestrator")
+      ? JSON.stringify({ tasks: [{ key: "flights", title: "Find flights", assignee: "Flight Specialist", input: "Find flights to Lisbon" }, { key: "hotels", title: "Find hotels", assignee: "Hotel Specialist", input: "Find hotels in Lisbon", depends_on: ["flights"] }] })
+      : "Lisbon in 3 days: Alfama, Belém, Sintra.";
+    res.end(JSON.stringify({ choices: [{ message: { content }, finish_reason: "stop" }], usage: { prompt_tokens: 120, completion_tokens: 40 } }));
   });
 });
 await new Promise((r) => model.listen(0, "127.0.0.1", r));
@@ -60,10 +64,11 @@ try {
   await page.screenshot({ path: `${SHOTS}/models.png` });
 
   // agents
-  for (const [n, r] of [["Travel Director", "Coordinates requests"], ["Flight Specialist", "Finds flights"], ["Hotel Specialist", "Compares hotels"]]) {
+  for (const [n, r, k] of [["Travel Director", "Coordinates requests", "orchestrator"], ["Flight Specialist", "Finds flights", "specialist"], ["Hotel Specialist", "Compares hotels", "specialist"]]) {
     await page.getByRole("link", { name: "Agents", exact: true }).click();
     await page.getByRole("button", { name: "New agent" }).click();
     await page.getByLabel("Name", { exact: true }).fill(n);
+    await page.getByLabel("Kind").selectOption(k);
     await page.getByLabel("Role (one line)").fill(r);
     await page.getByLabel("Instructions").fill("Be concise.");
     await page.getByRole("button", { name: "Create agent" }).click();
@@ -91,6 +96,30 @@ try {
   const nodes = await page.locator("svg[aria-label='Organisation chart'] .node").count();
   if (nodes !== 3) throw new Error(`expected 3 org nodes, got ${nodes}`);
   await page.screenshot({ path: `${SHOTS}/teams.png` });
+
+  // mission: orchestrator plans, specialists execute, synthesis; graph + message diagram render
+  await page.getByRole("link", { name: "Missions" }).click();
+  await page.getByLabel("Title").fill("Lisbon trip");
+  await page.getByLabel("Team").selectOption({ label: "Travel Agency (3)" });
+  await page.getByLabel("Goal").fill("Plan a 3 day Lisbon trip");
+  await page.getByRole("button", { name: "Start mission" }).click();
+  await page.getByRole("heading", { name: "Lisbon trip" }).waitFor();
+  await page.locator(".badge.succeeded").first().waitFor({ timeout: 20000 });
+  await page.getByText("Lisbon in 3 days").first().waitFor();
+  const tnodes = await page.locator("svg[aria-label='Task graph'] .tnode").count();
+  if (tnodes !== 4) throw new Error(`expected 4 task nodes (plan, 2 work, synthesize), got ${tnodes}`);
+  const msgs = await page.locator("svg[aria-label='Agent message sequence'] .msg").count();
+  if (msgs < 4) throw new Error(`expected >=4 agent messages, got ${msgs}`);
+  await page.screenshot({ path: `${SHOTS}/mission.png`, fullPage: true });
+
+  // memory: finished tasks left episodic memories; agent-scoped recall works
+  await page.getByRole("link", { name: "Memory" }).click();
+  await page.getByLabel("Agent").first().selectOption({ label: "Flight Specialist (reach: agent)" });
+  await page.getByRole("cell", { name: /Completed task "Find flights"/ }).first().waitFor();
+  await page.getByPlaceholder(/Test recall/).fill("find flights to Lisbon");
+  await page.getByRole("button", { name: "Search as agent" }).click();
+  await page.getByRole("cell", { name: /Completed task/ }).first().waitFor();
+  await page.screenshot({ path: `${SHOTS}/memory.png`, fullPage: true });
 
   // usage + audit
   await page.getByRole("link", { name: "Cost & usage" }).click();

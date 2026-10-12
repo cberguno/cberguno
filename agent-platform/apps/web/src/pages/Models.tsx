@@ -12,7 +12,7 @@ export default function Models() {
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [pf, setPf] = useState({ name: "", kind: "openai_compat", base_url: "", api_key: "" });
-  const [mf, setMf] = useState({ provider_id: "", model_name: "", display_name: "", tier: "standard", context_window: 128000, supports_tools: false, usd_per_mtok_in: 0, usd_per_mtok_out: 0 });
+  const [mf, setMf] = useState({ provider_id: "", model_name: "", display_name: "", tier: "standard", kind: "chat", context_window: 128000, supports_tools: false, usd_per_mtok_in: 0, usd_per_mtok_out: 0 });
   const run = async (fn: () => Promise<unknown>, after: () => void) => {
     try { setErr(null); await fn(); after(); } catch (e) { setErr((e as Error).message); }
   };
@@ -72,7 +72,7 @@ export default function Models() {
           <tbody>
             {models.data?.map((m) => (
               <tr key={m.id} className={m.enabled ? "" : "dim"}>
-                <td>{m.display_name}<div className="muted small mono">{m.model_name}</div></td><td>{m.provider_name}</td><td>{m.tier}</td>
+                <td>{m.display_name}<div className="muted small mono">{m.model_name}</div></td><td>{m.provider_name}</td><td>{m.tier}{m.kind === "embedding" && <div className="muted small">embedding</div>}</td>
                 <td>{m.context_window.toLocaleString()}</td><td>{usd(m.usd_per_mtok_in)}</td><td>{usd(m.usd_per_mtok_out)}</td>
                 <td>{m.avg_latency_ms ? `${m.avg_latency_ms} ms` : "—"}</td>
                 <td className="row">
@@ -94,6 +94,9 @@ export default function Models() {
             <label>Display name<input value={mf.display_name} onChange={(e) => setMf({ ...mf, display_name: e.target.value })} /></label>
             <label>Tier
               <select value={mf.tier} onChange={(e) => setMf({ ...mf, tier: e.target.value })}><option value="fast">fast</option><option value="standard">standard</option><option value="frontier">frontier</option></select>
+            </label>
+            <label>Kind
+              <select value={mf.kind} onChange={(e) => setMf({ ...mf, kind: e.target.value })}><option value="chat">chat</option><option value="embedding">embedding (memory)</option></select>
             </label>
             <label>Context window<input type="number" min={1} value={mf.context_window} onChange={(e) => setMf({ ...mf, context_window: +e.target.value })} /></label>
             <label>$ / Mtok input<input type="number" step="any" min={0} value={mf.usd_per_mtok_in} onChange={(e) => setMf({ ...mf, usd_per_mtok_in: +e.target.value })} /></label>

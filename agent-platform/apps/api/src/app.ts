@@ -10,6 +10,8 @@ import { hashPassword } from "./crypto.js";
 import type { Db } from "./db.js";
 import { agentRoutes } from "./routes/agents.js";
 import { coreRoutes } from "./routes/core.js";
+import { memoryRoutes } from "./routes/memory.js";
+import { missionRoutes } from "./routes/missions.js";
 import { runRoutes } from "./routes/runs.js";
 import { pgToHttp } from "./routes/util.js";
 import { RunController, type RuntimeDeps } from "./runtime.js";
@@ -38,6 +40,8 @@ export async function buildApp(db: Db, cfg: Config, opts: { adapters?: Record<Pr
   coreRoutes(app, db, cfg);
   agentRoutes(app, db, cfg, ctl);
   runRoutes(app, db, cfg, deps, ctl, bus);
+  missionRoutes(app, db, cfg);
+  memoryRoutes(app, db, cfg, { db, masterKey: cfg.PLATFORM_MASTER_KEY, adapters: opts.adapters });
 
   // Serve the built dashboard (SPA fallback) when present.
   const webDist = cfg.WEB_DIST;

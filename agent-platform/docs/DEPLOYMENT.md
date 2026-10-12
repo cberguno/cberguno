@@ -39,10 +39,12 @@ Run nightly from cron, copy off-box, and **test a restore** before relying on it
 3. Set `PLATFORM_MASTER_KEY`, `JWT_SECRET`, `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` as service variables.
 4. Deploy; health check is `/api/health`. Generate a public domain in the service settings.
 
-Railway's stock Postgres does not include `pgvector`; Phase 2 will need Railway's pgvector template or an external Postgres. Phase 1 does not use it.
+**pgvector is required from Phase 2** (migration `002` runs `CREATE EXTENSION vector` and fails clearly without it). Railway's stock Postgres plugin does not include it: use Railway's pgvector template, or any Postgres that offers it (the compose file's `pgvector/pgvector:pg16` image does).
 
-## Scaling notes (current limits)
+## Scaling and durability
 
-* Phase 1 run execution and the live event stream are **in-process**. Run a single API replica until Phase 2 moves events to Redis and execution to workers.
-* A restart marks any in-flight runs `failed: interrupted by server restart` (no silent loss). Resumable missions arrive in Phase 2.
+* **Missions are durable.** Their state is in Postgres; restart or kill the API/workers at any time. A task whose worker died is retried when its lease (`WORKER_LEASE_MS`, default 60 s) expires. Choose a lease longer than your slowest single model call.
+* **Scale workers** with `docker compose --profile scale up -d --scale worker=N` (or any process running `node dist/worker-main.js` with the same env). Embedded and standalone workers coexist safely.
+* **Still single-node:** direct single-agent runs (Run console) execute in the API process and their live event stream is in-process; a restart marks in-flight direct runs `failed: interrupted by server restart` (no silent loss). Mission progress is read from the database, so it works across replicas.
+* **Backups now include memory and mission history;** `pg_dump` covers pgvector columns. Restoring needs the extension installed on the target.
 * Login throttling is per-process memory; a distributed limiter is Phase 5.
