@@ -1,0 +1,27 @@
+# Production-shaped stack for a single VPS (e.g. OVHcloud). Put Caddy/nginx in front for TLS.
+# Postgres uses the pgvector image so Phase 2 (memory) needs no infrastructure change.
+# Redis is intentionally NOT included yet: Phase 1 does not use it.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: agent
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent -d agent"]
+      interval: 5s
+      retries: 10
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db: { condition: service_healthy }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://agent:${POSTGRES_PASSWORD}@db:5432/agent
+    ports: ["127.0.0.1:8080:8080"]   # bind to localhost; expose through your TLS reverse proxy
+volumes:
+  pgdata:
